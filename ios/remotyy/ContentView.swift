@@ -34,8 +34,7 @@ struct ContentView: View {
                         Text("No Hosts Available")
                             .font(.title2)
                             .fontWeight(.semibold)
-                        Text("Connect to a signaling server
-to discover remote hosts")
+                        Text("Connect to a signaling server to discover remote hosts")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
@@ -54,6 +53,24 @@ to discover remote hosts")
                     List(app.hosts) { host in
                         NavigationLink(destination: TerminalView(host: host)) {
                             HostRow(host: host)
+                        }
+                        .swipeActions(edge: .trailing) {
+                            if host.features.contains("screen") {
+                                NavigationLink(destination: ScreenView(host: host)) {
+                                    Label("Screen", systemImage: "display")
+                                }
+                                .tint(.blue)
+                            }
+                        }
+                        .contextMenu {
+                            NavigationLink(destination: TerminalView(host: host)) {
+                                Label("Terminal", systemImage: "terminal")
+                            }
+                            if host.features.contains("screen") {
+                                NavigationLink(destination: ScreenView(host: host)) {
+                                    Label("Screen Share", systemImage: "display")
+                                }
+                            }
                         }
                     }
                     .listStyle(.plain)

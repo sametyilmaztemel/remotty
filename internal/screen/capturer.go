@@ -122,9 +122,7 @@ func (c *Capturer) captureFrame() (*image.RGBA, error) {
 }
 
 func (c *Capturer) captureMacOS() (*image.RGBA, error) {
-	// macOS: Use CGDisplay API via CGO
-	// For now, return a placeholder
-	return nil, fmt.Errorf("macOS screen capture requires CGO — implement via CGDisplay")
+	return captureDisplay(c.cfg.DisplayID)
 }
 
 func (c *Capturer) captureLinux() (*image.RGBA, error) {
@@ -132,8 +130,4 @@ func (c *Capturer) captureLinux() (*image.RGBA, error) {
 	return nil, fmt.Errorf("Linux screen capture requires X11/PipeWire")
 }
 
-// EncodeJPEG encodes an RGBA image to JPEG bytes.
-func EncodeJPEG(img *image.RGBA, quality int) ([]byte, error) {
-	// Use stdlib image/jpeg or a faster encoder
-	return nil, fmt.Errorf("JPEG encoding not yet implemented")
-}
+// EncodeJPEG is implemented in encoder.go (cross-platform file).

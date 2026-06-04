@@ -30,6 +30,9 @@ let package = Package(
                 "ContentView.swift",
                 "ConnectionView.swift",
                 "TerminalView.swift",
+                "WebRTCService.swift",
+                "TouchHandler.swift",
+                "ScreenView.swift",
             ],
             resources: [
                 .process("Assets.xcassets"),

@@ -39,9 +39,17 @@ const (
 	MsgResize MessageType = "resize"
 
 	// Data Channel — Screen
-	MsgScreenStart MessageType = "screen_start"
-	MsgScreenStop  MessageType = "screen_stop"
-	MsgScreenFrame MessageType = "screen_frame"
+	MsgScreenStart  MessageType = "screen_start"
+	MsgScreenStop   MessageType = "screen_stop"
+	MsgScreenFrame  MessageType = "screen_frame"
+	MsgScreenResize MessageType = "screen_resize"
+
+	// Data Channel — Input Events
+	MsgMouseMove   MessageType = "mouse_move"
+	MsgMouseClick  MessageType = "mouse_click"
+	MsgMouseScroll MessageType = "mouse_scroll"
+	MsgKeyPress    MessageType = "key_press"
+	MsgKeyRelease  MessageType = "key_release"
 
 	// Data Channel — File Transfer
 	MsgFileRequest  MessageType = "file_request"
@@ -160,10 +168,36 @@ type ErrorPayload struct {
 
 // ScreenConfigPayload configures screen sharing.
 type ScreenConfigPayload struct {
-	FPS          int  `json:"fps"`
-	Quality      int  `json:"quality"`
-	MaxDimension int  `json:"max_dimension"`
+	FPS           int  `json:"fps"`
+	Quality       int  `json:"quality"`
+	MaxDimension  int  `json:"max_dimension"`
 	CaptureCursor bool `json:"capture_cursor"`
+}
+
+// MouseMovePayload for remote mouse movement.
+type MouseMovePayload struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+// MouseClickPayload for remote mouse click.
+type MouseClickPayload struct {
+	Button int     `json:"button"` // 0=left, 1=right, 2=middle
+	X      float64 `json:"x"`
+	Y      float64 `json:"y"`
+	Down   bool    `json:"down"`
+}
+
+// MouseScrollPayload for remote scroll.
+type MouseScrollPayload struct {
+	DeltaX float64 `json:"delta_x"`
+	DeltaY float64 `json:"delta_y"`
+}
+
+// KeyPayload for remote keyboard input.
+type KeyPayload struct {
+	KeyCode uint16 `json:"key_code"`
+	Chars   string `json:"chars,omitempty"`
 }
 
 // ClipboardPayload carries clipboard contents.
