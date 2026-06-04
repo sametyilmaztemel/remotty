@@ -1,8 +1,8 @@
-# remotyy iOS App — Architecture
+# remotty iOS App — Architecture
 
 ## Overview
 
-Native iOS client for remotyy, written in SwiftUI. Connects to remotyy signaling servers,
+Native iOS client for remotty, written in SwiftUI. Connects to remotty signaling servers,
 discovers hosts, and establishes WebRTC connections for terminal and screen access.
 
 ## Architecture
@@ -28,7 +28,7 @@ discovers hosts, and establishes WebRTC connections for terminal and screen acce
 
 ## Components
 
-### `remotyyApp.swift` — App Entry
+### `remottyApp.swift` — App Entry
 - SwiftUI `@main` entry point
 - `AppState` ObservableObject for global state
 - Connection status tracking
@@ -73,7 +73,7 @@ class WebRTCService: ObservableObject {
 
 ## Setup
 
-1. Open `ios/remotyy.xcodeproj` in Xcode 15+
+1. Open `ios/remotty.xcodeproj` in Xcode 15+
 2. Install dependencies: `pod install`
 3. Set signing team
 4. Build to simulator or device

@@ -3,15 +3,15 @@
 import PackageDescription
 
 let package = Package(
-    name: "remotyy",
+    name: "remotty",
     platforms: [
         .macOS(.v14),
     ],
     targets: [
         .executableTarget(
-            name: "remotyy",
+            name: "remotty",
             path: ".",
-            exclude: ["Info.plist", "build", "remotyy.xcodeproj"],
+            exclude: ["Info.plist", "build", "remotty.xcodeproj"],
             sources: [
                 "main.swift",
                 "AppDelegate.swift",

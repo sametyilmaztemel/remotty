@@ -1,11 +1,11 @@
-# remotyy Innovation Roadmap (No-AI Track)
+# remotty Innovation Roadmap (No-AI Track)
 
 > Core principle: **Simple, fast, universal remote access — no AI, no complexity.**
 > Macky'nin yaptığını al, daha geniş platformda, daha yetenekli, açık kaynak yap.
 
-## remotyy'in 3 Temel Farkı (Macky'ye Karşı)
+## remotty'in 3 Temel Farkı (Macky'ye Karşı)
 
-| Eksen | Macky | remotyy | Neden Önemli |
+| Eksen | Macky | remotty | Neden Önemli |
 |-------|-------|---------|-------------|
 | **Host** | Sadece macOS 15+ | macOS + Linux (ARM64/AMD64) + Windows | Oracle Cloud, Raspberry Pi, VPS, docker sunucuları |
 | **Client** | Sadece iOS 18+ | Web + CLI + TUI + iOS + macOS | Her cihazdan bağlan, app gereksiz |
@@ -20,7 +20,7 @@ Macky'de olanı **daha iyi** yap. Zaten çoğu tamam.
 ### 1.1 QR Pairing ⭐
 **Etki:** Yüksek / **Çaba:** Düşük (1 gün)
 
-Macky'de "create account → sign in on both devices → set master password" gibi bir akış var. remotyy bunu **QR kod ile sıfırlıyor:**
+Macky'de "create account → sign in on both devices → set master password" gibi bir akış var. remotty bunu **QR kod ile sıfırlıyor:**
 
 1. Host çalışır → terminalde QR kod gösterir
 2. Telefonla/browser'la QR okut → WebRTC bağlantısı kurulur
@@ -29,7 +29,7 @@ Macky'de "create account → sign in on both devices → set master password" gi
 ```
 Host CLI:                    Telefon:
 ┌──────────────────────┐    ┌──────────────┐
-│ ⎈ remotyy host       │    │  📱 QR Code  │
+│ ⎈ remotty host       │    │  📱 QR Code  │
 │                      │    │              │
 │ ┌──────────────────┐ │    │  Scan to     │
 │ │ █▀▀▀▀▀█ █▀▀▀▀▀█ │ │───▶│  connect     │
@@ -42,16 +42,16 @@ Host CLI:                    Telefon:
 └──────────────────────┘
 ```
 
-**Implementation:** QR kod içinde `remotyy://<signal-url>/<host-id>/<token>` formatı. Web client `navigator.mediaDevices.getUserMedia` ile tarar, native app AVFoundation ile.
+**Implementation:** QR kod içinde `remotty://<signal-url>/<host-id>/<token>` formatı. Web client `navigator.mediaDevices.getUserMedia` ile tarar, native app AVFoundation ile.
 
-**Macky farkı:** Macky'de hesap açman lazım. remotyy'de QR bas → bağlan → bitti.
+**Macky farkı:** Macky'de hesap açman lazım. remotty'de QR bas → bağlan → bitti.
 
 ### 1.2 File Transfer (Drag-Drop)
 **Etki:** Yüksek / **Çaba:** Orta (3 gün)
 
 Zaten `internal/transfer/` paketi hazır. Eksik olan:
 - **Web:** Drag-drop zone çalışıyor (FileTransfer.tsx), WebRTC data channel bağlantısı yapılacak
-- **CLI:** `remotyy cp <local> <host>:<path>` komutu
+- **CLI:** `remotty cp <local> <host>:<path>` komutu
 - **Progress:** Transfer progress bar, resume, cancel
 
 **Macky farkı:** Macky'de file transfer **YOK**. Sadece terminal ve screen var.
@@ -75,7 +75,7 @@ Bazı ağlarda (otel WiFi, kurumsal proxy) P2P WebRTC bağlantı kuramaz. TURN s
 - Latency artar ama bağlantı kopmaz
 - Self-host TURN da olabilir (coturn Docker image'ı)
 
-**Macky farkı:** Macky muhtemelen kendi TURN sunucularını kullanıyor (ücretli). remotyy ile kendi TURN'unu kur + maliyet sıfır.
+**Macky farkı:** Macky muhtemelen kendi TURN sunucularını kullanıyor (ücretli). remotty ile kendi TURN'unu kur + maliyet sıfır.
 
 ---
 
@@ -92,8 +92,8 @@ WebRTC data channel üzerinden TCP tunnel. Macky'de **kesinlikle yok**.
 # Mac'te localhost:3000'de Next.js çalışıyor
 # Telefondan erişmek istiyorsun:
 
-remotyy port-forward 3000
-# → https://remotyy.io/tunnel/abc-123 → telefonda aç
+remotty port-forward 3000
+# → https://remotty.io/tunnel/abc-123 → telefonda aç
 ```
 
 Nasıl çalışır:
@@ -102,14 +102,14 @@ Nasıl çalışır:
 3. Client tarafında local port dinler veya web proxy gösterir
 4. **Use case:** "Telefonumdan localhost'taki uygulamayı görmek istiyorum"
 
-**Bunu yapabilen çok az tool var** (Ngrok,但要 ücretli). remotyy ile bedava, kendi sunucunda, E2E encrypted.
+**Bunu yapabilen çok az tool var** (Ngrok,但要 ücretli). remotty ile bedava, kendi sunucunda, E2E encrypted.
 
 ### 2.2 Session Recording & Replay (Asciinema Style)
 **Etki:** Yüksek / **Çaba:** Orta (1 hafta)
 
 `internal/pty/recorder.go` hazır. Eksik olan:
 - **Web replay:** Cast asciicast v2 formatında kaydet → web player'da oynat
-- **CLI replay:** `remotyy replay <session-id>`
+- **CLI replay:** `remotty replay <session-id>`
 - **Share:** Kaydı export et, başkası izlesin
 
 **Kullanım senaryoları:**
@@ -121,8 +121,8 @@ Nasıl çalışır:
 **Etki:** Orta / **Çaba:** Düşük (2 gün)
 
 Aynı WiFi'da host'u otomatik bul:
-- Host, mDNS (Bonjour) ile `_remotyy._tcp` servisi olarak yayın yapar
-- Client, aynı ağdaki remotyy host'larını otomatik listeler
+- Host, mDNS (Bonjour) ile `_remotty._tcp` servisi olarak yayın yapar
+- Client, aynı ağdaki remotty host'larını otomatik listeler
 - **Sıfır konfigürasyon:** Aynı WiFi'a bağlan → host'u gör → tıkla → bağlan
 
 ### 2.4 Multi-Session & Session Persistence
@@ -132,12 +132,12 @@ Aynı WiFi'da host'u otomatik bul:
   - Bağlantı kopsa bile terminal durur
   - Tekrar bağlanınca kaldığın yerden devam
 - **Multi-client:** Aynı anda 2 kişi aynı terminal'i görebilir (pair programming)
-- **Session list:** `remotyy sessions` → aktif session'ları gör + attach
+- **Session list:** `remotty sessions` → aktif session'ları gör + attach
 
 ### 2.5 Wake-on-LAN + Lid-Closed Mode
 **Etki:** Orta / **Çaba:** Orta (3 gün)
 
-- **Wake-on-LAN:** Host kapalıysa → magic packet gönder → açıl → remotyy bağlan
+- **Wake-on-LAN:** Host kapalıysa → magic packet gönder → açıl → remotty bağlan
 - **Lid-closed mode:** Mac kapalıyken (clamshell) çalışmaya devam et
   - macOS'ta `caffeinate` ile prevent sleep
   - Power nap ile düşük güçte bekleme
@@ -156,7 +156,7 @@ Kurumsal kullanım için gerekli özellikler.
 
 ### 3.2 Time-Bound Access Tokens
 ```
-remotyy token create --duration 30m --read-only
+remotty token create --duration 30m --read-only
 # → tok_abc123...
 # Bunu birine ver, 30dk geçerli, sadece görüntüle
 ```
@@ -173,9 +173,9 @@ remotyy token create --duration 30m --read-only
 
 ---
 
-## Final Karşılaştırma: remotyy vs Macky
+## Final Karşılaştırma: remotty vs Macky
 
-| Özellik | Macky ($29) | remotyy v0.4 | remotyy v1.0 (hedef) |
+| Özellik | Macky ($29) | remotty v0.4 | remotty v1.0 (hedef) |
 |---------|------------|--------------|---------------------|
 | **Host platform** | Sadece macOS | Mac + Linux ARM | Mac + Linux + Windows |
 | **Client platform** | Sadece iOS | Web + CLI + TUI | Web + CLI + TUI + iOS + macOS |
@@ -212,10 +212,10 @@ Hafta 11-12  ████████████████████  Read-
 
 ## En Kritik 3 Özellik (MVP+)
 
-Sana kalmış, ama bence remotyy'i Macky'den **kesin olarak ayıracak** 3 şey:
+Sana kalmış, ama bence remotty'i Macky'den **kesin olarak ayıracak** 3 şey:
 
 1. **QR Pairing** — "App kur, hesap aç, login ol" yerine "QR oku, bağlan". Apple bile böyle yapıyor.
-2. **Port Forwarding** — Developer'ların Macky yerine remotyy seçmesinin #1 sebebi.
+2. **Port Forwarding** — Developer'ların Macky yerine remotty seçmesinin #1 sebebi.
 3. **Multi-platform host** — Oracle Cloud'unda çalıştır, VPS'nde çalıştır, Raspberry Pi'nde çalıştır. Macky bunların hiçbirini yapamaz (biz zaten yapıyoruz).
 
-Bunların üçü de **AI'sız, basit, tool-level** özellikler. remotyy'in prensibini bozmaz, güçlendirir.
+Bunların üçü de **AI'sız, basit, tool-level** özellikler. remotty'in prensibini bozmaz, güçlendirir.

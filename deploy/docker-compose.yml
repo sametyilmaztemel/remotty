@@ -1,19 +1,19 @@
 version: '3.8'
 
 services:
-  remotyy-signal:
+  remotty-signal:
     build:
       context: .
       dockerfile: Dockerfile.signal
     ports:
       - "9000:9000"
     environment:
-      - REMOTYY_AUTH_TOKEN=${REMOTYY_AUTH_TOKEN:-dev-token}
+      - REMOTTY_AUTH_TOKEN=${REMOTTY_AUTH_TOKEN:-dev-token}
     restart: unless-stopped
     networks:
-      - remotyy-net
+      - remotty-net
 
-  remotyy-web:
+  remotty-web:
     image: nginx:alpine
     ports:
       - "3000:80"
@@ -21,8 +21,8 @@ services:
       - ./web:/usr/share/nginx/html:ro
     restart: unless-stopped
     networks:
-      - remotyy-net
+      - remotty-net
 
 networks:
-  remotyy-net:
+  remotty-net:
     driver: bridge

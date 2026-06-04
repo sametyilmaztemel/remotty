@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 import ServiceManagement
 
-let Log = OSLog(subsystem: "com.remotyy.macos", category: "general")
+let Log = OSLog(subsystem: "com.remotty.macos", category: "general")
 
 // MARK: - HostManager
 
@@ -179,13 +179,13 @@ public class HostManager: ObservableObject {
 
     func findBinary() -> String? {
         // 1. Bundled binary
-        if let p = Bundle.main.path(forResource: "remotyyd", ofType: nil) {
+        if let p = Bundle.main.path(forResource: "remottyd", ofType: nil) {
             return p
         }
         // 2. which(1)
         let which = Process()
         which.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        which.arguments = ["remotyy"]
+        which.arguments = ["remotty"]
         let pipe = Pipe()
         which.standardOutput = pipe
         try? which.run()
@@ -198,7 +198,7 @@ public class HostManager: ObservableObject {
             }
         }
         // 3. Common locations
-        for candidate in ["/usr/local/bin/remotyy", "/opt/homebrew/bin/remotyy"] {
+        for candidate in ["/usr/local/bin/remotty", "/opt/homebrew/bin/remotty"] {
             if FileManager.default.fileExists(atPath: candidate) {
                 return candidate
             }

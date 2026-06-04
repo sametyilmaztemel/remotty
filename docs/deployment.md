@@ -1,4 +1,4 @@
-# remotyy Deployment Guide
+# remotty Deployment Guide
 
 ## Quick Start
 
@@ -6,10 +6,10 @@
 
 ```bash
 # Build
-go build -o remotyy ./cmd/remotyy
+go build -o remotty ./cmd/remotty
 
 # Run with config
-./remotyy serve --config remotyy.yaml
+./remotty serve --config remotty.yaml
 ```
 
 Minimal config:
@@ -25,7 +25,7 @@ signal:
 ### 2. Host Daemon
 
 ```bash
-./remotyy host --config host.yaml
+./remotty host --config host.yaml
 ```
 
 Host config:
@@ -46,7 +46,7 @@ host:
 
 ```bash
 # TUI client
-./remotyy connect --host my-server --signal ws://your-server:9000
+./remotty connect --host my-server --signal ws://your-server:9000
 
 # Web client — serve via signal server or separately
 cd web && npm run build
@@ -60,16 +60,16 @@ cd web && npm run build
 ### Systemd Service (Signal Server)
 
 ```ini
-# /etc/systemd/system/remotyy-signal.service
+# /etc/systemd/system/remotty-signal.service
 [Unit]
-Description=remotyy Signal Server
+Description=remotty Signal Server
 After=network.target
 
 [Service]
 Type=simple
-User=remotyy
-Group=remotyy
-ExecStart=/usr/local/bin/remotyy serve --config /etc/remotyy/signal.yaml
+User=remotty
+Group=remotty
+ExecStart=/usr/local/bin/remotty serve --config /etc/remotty/signal.yaml
 Restart=always
 RestartSec=5
 LimitNOFILE=65535
@@ -78,7 +78,7 @@ LimitNOFILE=65535
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/log/remotyy /var/lib/remotyy
+ReadWritePaths=/var/log/remotty /var/lib/remotty
 PrivateTmp=true
 
 [Install]
@@ -86,33 +86,33 @@ WantedBy=multi-user.target
 ```
 
 ```bash
-sudo useradd -r -s /bin/false remotyy
-sudo mkdir -p /etc/remotyy /var/log/remotyy /var/lib/remotyy
-sudo chown remotyy:remotyy /var/log/remotyy /var/lib/remotyy
+sudo useradd -r -s /bin/false remotty
+sudo mkdir -p /etc/remotty /var/log/remotty /var/lib/remotty
+sudo chown remotty:remotty /var/log/remotty /var/lib/remotty
 sudo systemctl daemon-reload
-sudo systemctl enable --now remotyy-signal
+sudo systemctl enable --now remotty-signal
 ```
 
 ### Systemd Service (Host Daemon)
 
 ```ini
-# /etc/systemd/system/remotyy-host.service
+# /etc/systemd/system/remotty-host.service
 [Unit]
-Description=remotyy Host Daemon
-After=network.target remotyy-signal.service
+Description=remotty Host Daemon
+After=network.target remotty-signal.service
 
 [Service]
 Type=simple
-User=remotyy
-Group=remotyy
-ExecStart=/usr/local/bin/remotyy host --config /etc/remotyy/host.yaml
+User=remotty
+Group=remotty
+ExecStart=/usr/local/bin/remotty host --config /etc/remotty/host.yaml
 Restart=always
 RestartSec=5
 
 # PTY access needs devpts
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/var/log/remotyy /var/lib/remotyy /dev/pts
+ReadWritePaths=/var/log/remotty /var/lib/remotty /dev/pts
 PrivateTmp=true
 
 [Install]
@@ -126,23 +126,23 @@ version: "3.8"
 
 services:
   signal:
-    image: remotyy/remotyy:latest
-    command: serve --config /etc/remotyy.yaml
+    image: remotty/remotty:latest
+    command: serve --config /etc/remotty.yaml
     ports:
       - "9000:9000"
     volumes:
-      - ./remotyy.yaml:/etc/remotyy.yaml:ro
-      - signal-data:/var/lib/remotyy
+      - ./remotty.yaml:/etc/remotty.yaml:ro
+      - signal-data:/var/lib/remotty
     restart: always
     security_opt:
       - no-new-privileges:true
 
   host:
-    image: remotyy/remotyy:latest
+    image: remotty/remotty:latest
     command: host --config /etc/host.yaml
     volumes:
       - ./host.yaml:/etc/host.yaml:ro
-      - host-data:/var/lib/remotyy
+      - host-data:/var/lib/remotty
     depends_on:
       - signal
     restart: always
@@ -161,10 +161,10 @@ volumes:
 ```nginx
 server {
     listen 443 ssl http2;
-    server_name remotyy.example.com;
+    server_name remotty.example.com;
 
-    ssl_certificate /etc/ssl/certs/remotyy.pem;
-    ssl_certificate_key /etc/ssl/private/remotyy.key;
+    ssl_certificate /etc/ssl/certs/remotty.pem;
+    ssl_certificate_key /etc/ssl/private/remotty.key;
 
     # Web UI
     location / {
@@ -192,15 +192,15 @@ server {
 ### Cloudflare Tunnel
 
 ```bash
-cloudflared tunnel create remotyy
-cloudflared tunnel route dns remotyy remotyy.example.com
+cloudflared tunnel create remotty
+cloudflared tunnel route dns remotty remotty.example.com
 
 # ~/.cloudflared/config.yml
-tunnel: remotyy
+tunnel: remotty
 credentials-file: ~/.cloudflared/<TUNNEL_ID>.json
 
 ingress:
-  - hostname: remotyy.example.com
+  - hostname: remotty.example.com
     service: http://localhost:9000
   - service: http_status:404
 ```

@@ -3,10 +3,10 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.remotyy.host</string>
+    <string>com.remotty.host</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/remotyy</string>
+        <string>/usr/local/bin/remotty</string>
         <string>host</string>
         <string>--signal</string>
         <string>ws://localhost:9000</string>
@@ -18,8 +18,8 @@
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/tmp/remotyy-host.log</string>
+    <string>/tmp/remotty-host.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/remotyy-host.log</string>
+    <string>/tmp/remotty-host.log</string>
 </dict>
 </plist>

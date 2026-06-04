@@ -1,4 +1,4 @@
-// Package auth provides authentication for remotyy connections.
+// Package auth provides authentication for remotty connections.
 package auth
 
 import (

@@ -45,7 +45,7 @@ func TestSpawnWriteRead(t *testing.T) {
 	defer sess.Close()
 
 	// Write a simple command
-	_, err = sess.Write([]byte("echo hello_remotyy\n"))
+	_, err = sess.Write([]byte("echo hello_remotty\n"))
 	if err != nil {
 		t.Fatalf("Write: %v", err)
 	}

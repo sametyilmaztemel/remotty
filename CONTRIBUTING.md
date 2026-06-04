@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for considering contributing to remotyy!
+Thank you for considering contributing to remotty!
 
 ## Code of Conduct
 
@@ -18,8 +18,8 @@ Be respectful, inclusive, and constructive.
 ## Development Setup
 
 ```bash
-git clone https://github.com/remotyy/remotyy.git
-cd remotyy
+git clone https://github.com/remotty/remotty.git
+cd remotty
 go mod download
 make build-all
 ```

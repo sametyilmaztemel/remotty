@@ -1,8 +1,8 @@
-# remotyy macOS Menu Bar App — Architecture
+# remotty macOS Menu Bar App — Architecture
 
 ## Overview
 
-Native macOS menu bar application that runs the remotyy host daemon.
+Native macOS menu bar application that runs the remotty host daemon.
 Provides one-click start/stop, status monitoring, and configuration.
 
 ## Architecture
@@ -25,7 +25,7 @@ Provides one-click start/stop, status monitoring, and configuration.
 │                                                    │
 │  ┌────────────────────────────────────────┐       │
 │  │  HostManager (ObservableObject)         │       │
-│  │  - NSTask → remotyy host binary        │       │
+│  │  - NSTask → remotty host binary        │       │
 │  │  - PID tracking                        │       │
 │  │  - Auto-restart on crash               │       │
 │  │  - Launch at login (SMAppService)      │       │
@@ -50,7 +50,7 @@ Provides one-click start/stop, status monitoring, and configuration.
 - Color-coded: Gray (stopped), Green (running)
 
 ### Host Manager
-- Spawns `remotyy host` as a subprocess
+- Spawns `remotty host` as a subprocess
 - Monitors process lifecycle
 - Reports status changes
 - Handles graceful shutdown
@@ -62,13 +62,13 @@ Provides one-click start/stop, status monitoring, and configuration.
 
 ## Setup
 
-1. Build remotyy Go binary first: `make build`
+1. Build remotty Go binary first: `make build`
 2. Build the macOS app: `make build-macos-app`
-3. Or open in Xcode: `open remotyy-macOS/Package.swift`
+3. Or open in Xcode: `open remotty-macOS/Package.swift`
 
 ## Requirements
 
 - macOS 14.0+
 - Xcode 15.0+
 - Swift 5.9+
-- remotyy binary in PATH
+- remotty binary in PATH

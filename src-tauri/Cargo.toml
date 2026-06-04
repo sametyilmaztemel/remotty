@@ -1,12 +1,12 @@
 [package]
-name = "remotyy"
+name = "remotty"
 version = "0.3.0"
 description = "Remote terminal & screen access via WebRTC"
-authors = ["remotyy"]
+authors = ["remotty"]
 edition = "2021"
 
 [lib]
-name = "remotyy_lib"
+name = "remotty_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

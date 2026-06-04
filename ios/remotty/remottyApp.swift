@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct remotyyApp: App {
+struct remottyApp: App {
     @StateObject private var appState = AppState()
     
     var body: some Scene {

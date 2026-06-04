@@ -1,8 +1,8 @@
-# remotyy Production Hardening Plan
+# remotty Production Hardening Plan
 
 > **For Hermes ARM:** Execute task-by-task, commit after each phase.
 
-**Goal:** Bring remotyy from v0.7.1 to production-ready quality — secure, stable, well-tested, properly configured.
+**Goal:** Bring remotty from v0.7.1 to production-ready quality — secure, stable, well-tested, properly configured.
 
 **Architecture:** Signal Server (WebSocket relay) + Host Daemon (remote machine agent) + Client (TUI/Web/Swift). WebRTC P2P for data channels.
 

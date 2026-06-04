@@ -1,4 +1,4 @@
-// Package host implements the remotyy host daemon that runs on machines
+// Package host implements the remotty host daemon that runs on machines
 // to be accessed remotely. It connects to the signaling server and
 // manages incoming WebRTC sessions.
 package host
@@ -15,12 +15,12 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
-	"github.com/sametyilmaztemel/remotyy/internal/auth"
-	"github.com/sametyilmaztemel/remotyy/internal/config"
-	"github.com/sametyilmaztemel/remotyy/internal/protocol"
-	"github.com/sametyilmaztemel/remotyy/internal/pty"
-	"github.com/sametyilmaztemel/remotyy/internal/screen"
-	"github.com/sametyilmaztemel/remotyy/internal/webrtc"
+	"github.com/sametyilmaztemel/remotty/internal/auth"
+	"github.com/sametyilmaztemel/remotty/internal/config"
+	"github.com/sametyilmaztemel/remotty/internal/protocol"
+	"github.com/sametyilmaztemel/remotty/internal/pty"
+	"github.com/sametyilmaztemel/remotty/internal/screen"
+	"github.com/sametyilmaztemel/remotty/internal/webrtc"
 )
 
 // Daemon runs on the host machine and manages remote access sessions.

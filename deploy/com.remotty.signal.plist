@@ -3,26 +3,26 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.remotyy.signal</string>
+    <string>com.remotty.signal</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/remotyy</string>
+        <string>/usr/local/bin/remotty</string>
         <string>signal</string>
         <string>--port</string>
         <string>9000</string>
         <string>--dev</string>
         <string>--web-dir</string>
-        <string>/Users/x13/projects/remotyy/web/dist</string>
+        <string>/Users/x13/projects/remotty/web/dist</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/tmp/remotyy-signal.log</string>
+    <string>/tmp/remotty-signal.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/remotyy-signal.log</string>
+    <string>/tmp/remotty-signal.log</string>
     <key>WorkingDirectory</key>
-    <string>/Users/x13/projects/remotyy</string>
+    <string>/Users/x13/projects/remotty</string>
 </dict>
 </plist>

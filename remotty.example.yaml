@@ -1,13 +1,13 @@
-# remotyy configuration
+# remotty configuration
 global:
-  data_dir: ~/.remotyy
+  data_dir: ~/.remotty
 
 signal:
   host: 0.0.0.0
   port: 9000
   dev_mode: false
   rate_limit: 60
-  # auth_token: set-via-env-REMOTYY_AUTH_TOKEN
+  # auth_token: set-via-env-REMOTTY_AUTH_TOKEN
   tls:
     enabled: false
     cert_file: ""
@@ -16,7 +16,7 @@ signal:
 host:
   signal_url: ws://localhost:9000
   name: my-server
-  # master_password: set-via-env-REMOTYY_MASTER_PASSWORD
+  # master_password: set-via-env-REMOTTY_MASTER_PASSWORD
   features:
     - terminal
     - screen
@@ -36,7 +36,7 @@ webrtc:
 logging:
   level: info
   format: console
-  # file: /var/log/remotyy/remotyy.log
+  # file: /var/log/remotty/remotty.log
 
 screen:
   enabled: true

@@ -1,8 +1,8 @@
-# remotyy Protocol Documentation
+# remotty Protocol Documentation
 
 > **Version:** 0.2.0  
 > **Last updated:** 2026-06-04  
-> **Go module:** `github.com/sametyilmaztemel/remotyy/internal/protocol`
+> **Go module:** `github.com/sametyilmaztemel/remotty/internal/protocol`
 
 ## Table of Contents
 
@@ -190,7 +190,7 @@ Sent by a host immediately after WebSocket connection to announce itself.
 | `name` | string | yes | Human-readable host name (max 64 chars) |
 | `platform` | string | yes | OS: `darwin`, `linux`, `windows` |
 | `arch` | string | yes | CPU arch: `arm64`, `amd64` |
-| `version` | string | yes | remotyy version |
+| `version` | string | yes | remotty version |
 | `features` | []string | yes | Supported features: `terminal`, `screen`, `file`, `clipboard` (max 20) |
 | `device_id` | string | no | Stable hardware identifier |
 
@@ -914,7 +914,7 @@ The WebRTC protocol supports two modes for data channel negotiation:
 1. **In-band (default, `negotiated: false`):** The channel is announced via SDP. The side that calls `createDataChannel()` triggers an `OnDataChannel` event on the remote peer.
 2. **Out-of-band (`negotiated: true`):** Both sides create the channel independently with the same ID. No SDP signaling needed.
 
-**remotyy uses in-band negotiation** (`negotiated: false`, `ordered: true`).
+**remotty uses in-band negotiation** (`negotiated: false`, `ordered: true`).
 
 **Client creates the channels** (terminal, auth). The host receives them via `OnDataChannel`.
 
@@ -940,7 +940,7 @@ When using in-band negotiation, channel IDs are auto-assigned. The iOS code curr
 
 ### Current State and Known Issues
 
-The iOS app (`ios/remotyy/`) has a `WebRTCService.swift` that implements most of the signaling and WebRTC flow, but several issues need to be resolved:
+The iOS app (`ios/remotty/`) has a `WebRTCService.swift` that implements most of the signaling and WebRTC flow, but several issues need to be resolved:
 
 #### Issue 1: Signaling `connect` message not sent on WebSocket open
 
@@ -1006,7 +1006,7 @@ config.isNegotiated = false
 
 #### Issue 5: Host list should use `list_hosts` protocol
 
-**Location:** `remotyyApp.swift` → `AppState`
+**Location:** `remottyApp.swift` → `AppState`
 
 **Problem:** The app has no mechanism to fetch the host list from the signaling server.
 
@@ -1044,7 +1044,7 @@ config.isNegotiated = false
 | `internal/signal/server.go` | Signaling server: peer management, room creation, relay |
 | `internal/host/daemon.go` | Host daemon: registration, session management, PTY/screen |
 | `internal/client/client.go` | CLI client: connect, WebRTC setup, terminal I/O |
-| `ios/remotyy/WebRTCService.swift` | iOS WebRTC + signaling service |
+| `ios/remotty/WebRTCService.swift` | iOS WebRTC + signaling service |
 | `web/src/lib/protocol.ts` | TypeScript protocol definitions |
 | `web/src/lib/signaling.ts` | TypeScript signaling client |
 | `web/src/hooks/useWebRTC.ts` | React WebRTC hook |

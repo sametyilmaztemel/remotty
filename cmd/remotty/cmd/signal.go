@@ -7,8 +7,8 @@ import (
 	"syscall"
 
 	"github.com/rs/zerolog/log"
-	"github.com/sametyilmaztemel/remotyy/internal/config"
-	"github.com/sametyilmaztemel/remotyy/internal/signal"
+	"github.com/sametyilmaztemel/remotty/internal/config"
+	"github.com/sametyilmaztemel/remotty/internal/signal"
 	"github.com/spf13/cobra"
 )
 
@@ -45,7 +45,7 @@ but never sees terminal or screen data.`,
 		}
 
 		// Env overrides
-		if authToken := os.Getenv("REMOTYY_AUTH_TOKEN"); authToken != "" {
+		if authToken := os.Getenv("REMOTTY_AUTH_TOKEN"); authToken != "" {
 			cfg.AuthToken = authToken
 		}
 

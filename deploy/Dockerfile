@@ -5,7 +5,7 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /remotyy ./cmd/remotyy
+RUN CGO_ENABLED=0 go build -o /remotty ./cmd/remotty
 
 # Stage 2: Build web client
 FROM node:20-alpine AS web-builder
@@ -20,10 +20,10 @@ FROM alpine:3.19
 RUN apk add --no-cache ca-certificates
 WORKDIR /app
 
-COPY --from=builder /remotyy /usr/local/bin/
+COPY --from=builder /remotty /usr/local/bin/
 COPY --from=web-builder /app/dist /app/web/dist
 
 EXPOSE 9000 3000
 
-ENTRYPOINT ["remotyy"]
+ENTRYPOINT ["remotty"]
 CMD ["signal", "--dev"]

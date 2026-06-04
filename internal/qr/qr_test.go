@@ -57,7 +57,7 @@ func TestDecodeURLInvalid(t *testing.T) {
 		t.Error("invalid URL should return error")
 	}
 
-	_, err = DecodeURL("remotyy://connect/invalid-json")
+	_, err = DecodeURL("remotty://connect/invalid-json")
 	if err == nil {
 		t.Error("invalid JSON payload should return error")
 	}
@@ -106,7 +106,7 @@ func TestGenerateSmall(t *testing.T) {
 func TestPairingURLWithToken(t *testing.T) {
 	p := PairingURL{
 		Version:  1,
-		Signal:   "wss://remotyy.example.com",
+		Signal:   "wss://remotty.example.com",
 		HostID:   "p-token",
 		HostName: "token-host",
 		Token:    "my-secret-token",

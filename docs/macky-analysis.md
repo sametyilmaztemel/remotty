@@ -183,8 +183,8 @@ Based on website claims and technical blog posts:
 | **No web client** | Cannot connect from a browser at a friend's computer or library |
 | **No CLI client** | Developers can't script or automate connections |
 
-### 7.2 Missing Features (remotyy has or could have)
-| Feature | Macky | remotyy |
+### 7.2 Missing Features (remotty has or could have)
+| Feature | Macky | remotty |
 |---------|-------|---------|
 | File transfer | ❌ | ✅ (built, needs WebRTC integration) |
 | Clipboard sync | ❌ | 🚧 (protocol defined) |
@@ -213,21 +213,21 @@ Based on website claims and technical blog posts:
 
 ---
 
-## 8. Key Insights for remotyy
+## 8. Key Insights for remotty
 
 ### 8.1 What Macky Does Right
-1. **Simple onboarding** — Install two apps, done. remotyy needs to match this simplicity.
+1. **Simple onboarding** — Install two apps, done. remotty needs to match this simplicity.
 2. **Security storytelling** — "Defense in Depth" with 4 numbered layers is effective marketing.
 3. **Direct comparison** — Macky vs "old way" comparison table is convincing.
 4. **Educational blog** — SEO content drives organic discovery.
 5. **One-time pricing** — $29 lifetime is a great psychological price point.
 6. **Zero setup** — The core message "no VPN, no port forwarding" resonates with users.
 
-### 8.2 Where remotyy Can Win
+### 8.2 Where remotty Can Win
 1. **Self-hosted** — Own your signaling, zero ongoing cost, no vendor lock-in.
 2. **Cross-platform host** — macOS + Linux + Windows (Macky is macOS-only).
 3. **Cross-platform client** — Web + CLI + TUI + iOS + macOS + Android (Macky is iOS-only).
-4. **File transfer** — Macky doesn't have it, remotyy does.
+4. **File transfer** — Macky doesn't have it, remotty does.
 5. **Clipboard sync** — Macky doesn't have it.
 6. **Port forwarding** — The killer developer feature Macky can't do.
 7. **Session recording** — Asciinema-style replay for audit.
@@ -236,7 +236,7 @@ Based on website claims and technical blog posts:
 10. **Unlimited free** — No session limits, no device limits.
 
 ### 8.3 Pricing Comparison
-| | Macky Basic | Macky Pro | remotyy |
+| | Macky Basic | Macky Pro | remotty |
 |--|-----------|----------|---------|
 | Price | $0 | $29 lifetime | **$0 (MIT)** |
 | Session limit | 5 min | Unlimited | **Unlimited** |

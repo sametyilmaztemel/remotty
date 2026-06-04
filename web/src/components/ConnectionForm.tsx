@@ -18,12 +18,12 @@ export default function ConnectionForm({ onConnect, initialUrl }: Props) {
   };
 
   const handleQRScan = (scannedUrl: string) => {
-    // Parse remotyy:// URL or use raw ws:// URL
+    // Parse remotty:// URL or use raw ws:// URL
     let signalUrl = scannedUrl;
-    if (scannedUrl.startsWith('remotyy://')) {
-      // Extract signal URL from remotyy:// protocol
+    if (scannedUrl.startsWith('remotty://')) {
+      // Extract signal URL from remotty:// protocol
       try {
-        const payload = scannedUrl.replace('remotyy://connect/', '');
+        const payload = scannedUrl.replace('remotty://connect/', '');
         const data = JSON.parse(decodeURIComponent(payload));
         signalUrl = data.signal || scannedUrl;
       } catch {}
@@ -58,7 +58,7 @@ export default function ConnectionForm({ onConnect, initialUrl }: Props) {
       <div className="connect-card">
         <div className="connect-logo">
           <span className="logo-icon">⎈</span>
-          <h1>remotyy</h1>
+          <h1>remotty</h1>
           <p className="tagline">remote terminal &middot; open source</p>
         </div>
 
@@ -114,10 +114,10 @@ export default function ConnectionForm({ onConnect, initialUrl }: Props) {
           <div className="help-box">
             <strong>Quick start</strong>
             <ol>
-              <li>Terminal: <code>remotyy signal --dev</code></li>
-              <li>Terminal: <code>remotyy host --signal ws://localhost:9000 --qr</code></li>
+              <li>Terminal: <code>remotty signal --dev</code></li>
+              <li>Terminal: <code>remotty host --signal ws://localhost:9000 --qr</code></li>
               <li>Scan QR with phone camera (📷 button)</li>
-              <li>Or use CLI: <code>remotyy connect</code></li>
+              <li>Or use CLI: <code>remotty connect</code></li>
             </ol>
             <strong>Test from iPhone</strong>
             <ol>

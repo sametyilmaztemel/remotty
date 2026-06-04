@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/rs/zerolog"
-	"github.com/sametyilmaztemel/remotyy/internal/config"
+	"github.com/sametyilmaztemel/remotty/internal/config"
 )
 
 func TestNewClient(t *testing.T) {

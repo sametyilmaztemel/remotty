@@ -23,7 +23,7 @@ export default function QRCode({ data, size = 200 }: Props) {
           if (parent) {
             const fallback = document.createElement('div');
             fallback.style.cssText = 'padding: 12px;font-size:10px;word-break:break-all;color:#666;';
-            fallback.textContent = `remotyy://${data.slice(0, 60)}...`;
+            fallback.textContent = `remotty://${data.slice(0, 60)}...`;
             parent.appendChild(fallback);
           }
         }}

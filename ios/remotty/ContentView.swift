@@ -16,7 +16,7 @@ struct ContentView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     Spacer()
-                    Text("remotyy")
+                    Text("remotty")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .fontDesign(.monospaced)
@@ -76,7 +76,7 @@ struct ContentView: View {
                     .listStyle(.plain)
                 }
             }
-            .navigationTitle("remotyy")
+            .navigationTitle("remotty")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

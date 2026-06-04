@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/sametyilmaztemel/remotyy/internal/protocol"
+	"github.com/sametyilmaztemel/remotty/internal/protocol"
 )
 
 func TestEngineCreateAndClose(t *testing.T) {

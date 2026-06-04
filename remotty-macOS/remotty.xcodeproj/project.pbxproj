@@ -18,7 +18,7 @@
 			<key>lastKnownFileType</key>
 			<string>sourcecode.swift</string>
 			<key>path</key>
-			<string>remotyyMenuBarApp.swift</string>
+			<string>remottyMenuBarApp.swift</string>
 			<key>sourceTree</key>
 			<string>&lt;group&gt;</string>
 		</dict>
@@ -95,7 +95,7 @@
 				<string>EF6082C38122400BBF10B617</string>
 			</array>
 			<key>name</key>
-			<string>remotyy</string>
+			<string>remotty</string>
 			<key>sourceTree</key>
 			<string>&lt;group&gt;</string>
 		</dict>
@@ -133,7 +133,7 @@
 			<key>includeInIndex</key>
 			<integer>0</integer>
 			<key>path</key>
-			<string>remotyy.app</string>
+			<string>remotty.app</string>
 			<key>sourceTree</key>
 			<string>BUILT_PRODUCTS_DIR</string>
 		</dict>
@@ -210,7 +210,7 @@
 				<key>MARKETING_VERSION</key>
 				<string>0.5.0</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
-				<string>com.remotyy.macos</string>
+				<string>com.remotty.macos</string>
 				<key>PRODUCT_NAME</key>
 				<string>$(TARGET_NAME)</string>
 				<key>SDKROOT</key>
@@ -257,7 +257,7 @@
 				<key>MARKETING_VERSION</key>
 				<string>0.5.0</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
-				<string>com.remotyy.macos</string>
+				<string>com.remotty.macos</string>
 				<key>PRODUCT_NAME</key>
 				<string>$(TARGET_NAME)</string>
 				<key>SDKROOT</key>
@@ -301,9 +301,9 @@
 			<key>dependencies</key>
 			<array/>
 			<key>name</key>
-			<string>remotyy</string>
+			<string>remotty</string>
 			<key>productName</key>
-			<string>remotyy</string>
+			<string>remotty</string>
 			<key>productReference</key>
 			<string>5B20835B70774370B7C994B7</string>
 			<key>productType</key>

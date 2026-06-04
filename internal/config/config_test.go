@@ -94,7 +94,7 @@ func TestParseLevel(t *testing.T) {
 func TestConfigFromYAML(t *testing.T) {
 	// Create a temp config file
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "remotyy.yaml")
+	cfgPath := filepath.Join(dir, "remotty.yaml")
 	content := []byte(`
 signal:
   host: "192.168.1.1"
@@ -169,10 +169,10 @@ screen:
 }
 
 func TestConfigFromEnv(t *testing.T) {
-	os.Setenv("REMOTYY_AUTH_TOKEN", "test-token-123")
-	os.Setenv("REMOTYY_LOG_LEVEL", "warn")
-	defer os.Unsetenv("REMOTYY_AUTH_TOKEN")
-	defer os.Unsetenv("REMOTYY_LOG_LEVEL")
+	os.Setenv("REMOTTY_AUTH_TOKEN", "test-token-123")
+	os.Setenv("REMOTTY_LOG_LEVEL", "warn")
+	defer os.Unsetenv("REMOTTY_AUTH_TOKEN")
+	defer os.Unsetenv("REMOTTY_LOG_LEVEL")
 
 	cfg, err := Load("")
 	if err != nil {
@@ -201,7 +201,7 @@ func TestConfigDefaults(t *testing.T) {
 
 func TestDefaultDataDir(t *testing.T) {
 	home, _ := os.UserHomeDir()
-	expected := filepath.Join(home, ".remotyy")
+	expected := filepath.Join(home, ".remotty")
 	dir := defaultDataDir()
 	if dir != expected {
 		t.Errorf("defaultDataDir() = %q, want %q", dir, expected)

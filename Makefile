@@ -1,4 +1,4 @@
-# remotyy Makefile
+# remotty Makefile
 .PHONY: all build build-all build-cli build-web \
         build-linux-arm64 build-linux-amd64 build-darwin-arm64 build-darwin-amd64 \
         build-macos-app build-dmg xcode-project build-tauri \
@@ -9,7 +9,7 @@ BIN_DIR   := bin
 VERSION   := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 COMMIT    := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 DATE      := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-GO_LDFLAGS := -ldflags "-s -w -X github.com/remotyy/remotyy/internal/config.Version=$(VERSION)"
+GO_LDFLAGS := -ldflags "-s -w -X github.com/remotty/remotty/internal/config.Version=$(VERSION)"
 
 # ─── Go Build (all-in-one binary) ─────────────────────────────
 all: build
@@ -17,23 +17,23 @@ all: build
 build: build-cli
 
 build-cli:
-	@echo "🔨 Building remotyy $(VERSION)..."
+	@echo "🔨 Building remotty $(VERSION)..."
 	@mkdir -p $(BIN_DIR)
-	CGO_ENABLED=0 go build $(GO_LDFLAGS) -o $(BIN_DIR)/remotyy ./cmd/remotyy
-	@echo "✅ Built: $(BIN_DIR)/remotyy"
+	CGO_ENABLED=0 go build $(GO_LDFLAGS) -o $(BIN_DIR)/remotty ./cmd/remotty
+	@echo "✅ Built: $(BIN_DIR)/remotty"
 
 # ─── Cross-compile ────────────────────────────────────────────
 build-linux-arm64:
-	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build $(GO_LDFLAGS) -o $(BIN_DIR)/remotyy-linux-arm64 ./cmd/remotyy
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build $(GO_LDFLAGS) -o $(BIN_DIR)/remotty-linux-arm64 ./cmd/remotty
 
 build-linux-amd64:
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build $(GO_LDFLAGS) -o $(BIN_DIR)/remotyy-linux-amd64 ./cmd/remotyy
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build $(GO_LDFLAGS) -o $(BIN_DIR)/remotty-linux-amd64 ./cmd/remotty
 
 build-darwin-arm64:
-	GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build $(GO_LDFLAGS) -o $(BIN_DIR)/remotyy-darwin-arm64 ./cmd/remotyy
+	GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build $(GO_LDFLAGS) -o $(BIN_DIR)/remotty-darwin-arm64 ./cmd/remotty
 
 build-darwin-amd64:
-	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build $(GO_LDFLAGS) -o $(BIN_DIR)/remotyy-darwin-amd64 ./cmd/remotyy
+	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build $(GO_LDFLAGS) -o $(BIN_DIR)/remotty-darwin-amd64 ./cmd/remotty
 
 build-all-platforms: build-linux-arm64 build-linux-amd64 build-darwin-arm64 build-darwin-amd64
 
@@ -50,11 +50,11 @@ xcode-project:
 
 build-macos-app: xcode-project
 	@echo "🖥  Building macOS .app..."
-	cd remotyy-macOS && xcodebuild -project remotyy.xcodeproj \
-		-scheme remotyy -configuration Release build \
+	cd remotty-macOS && xcodebuild -project remotty.xcodeproj \
+		-scheme remotty -configuration Release build \
 		-derivedDataPath build -quiet 2>/dev/null || \
-		xcodebuild -project remotyy.xcodeproj \
-		-scheme remotyy -configuration Release build \
+		xcodebuild -project remotty.xcodeproj \
+		-scheme remotty -configuration Release build \
 		-derivedDataPath build 2>&1 | tail -5
 
 build-dmg: build-macos-app
@@ -70,10 +70,10 @@ build-tauri:
 release: build build-web build-all-platforms
 	@echo "📦 Packaging release artifacts..."
 	@mkdir -p dist
-	cp $(BIN_DIR)/remotyy dist/
-	cd web && tar czf ../dist/remotyy-web.tar.gz dist/
-	cd dist && for f in remotyy-*; do \
-		[ "$$f" = "remotyy-web.tar.gz" ] && continue; \
+	cp $(BIN_DIR)/remotty dist/
+	cd web && tar czf ../dist/remotty-web.tar.gz dist/
+	cd dist && for f in remotty-*; do \
+		[ "$$f" = "remotty-web.tar.gz" ] && continue; \
 		gzip -c "$$f" > "$$f.tar.gz"; \
 	done
 	@echo "✅ Release artifacts in dist/"
@@ -81,12 +81,12 @@ release: build build-web build-all-platforms
 
 # ─── Development ──────────────────────────────────────────────
 dev:
-	@echo "Starting remotyy signal server on :9000..."
-	go run ./cmd/remotyy signal --dev
+	@echo "Starting remotty signal server on :9000..."
+	go run ./cmd/remotty signal --dev
 
 dev-host:
-	@echo "Starting remotyy host..."
-	go run ./cmd/remotyy host --signal ws://localhost:9000
+	@echo "Starting remotty host..."
+	go run ./cmd/remotty host --signal ws://localhost:9000
 
 dev-web:
 	cd web && npm run dev
@@ -113,7 +113,7 @@ clean:
 
 .PHONY: help
 help:
-	@echo "remotyy — remote terminal & screen access"
+	@echo "remotty — remote terminal & screen access"
 	@echo ""
 	@echo "Build:"
 	@echo "  make build              Build CLI binary"

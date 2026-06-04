@@ -22,23 +22,23 @@ jobs:
         with:
           go-version: '1.22'
       
-      - name: Build remotyy
+      - name: Build remotty
         run: |
           GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 \
-            go build -o dist/remotyy-${{ matrix.goos }}-${{ matrix.goarch }} \
-            -ldflags="-s -w -X github.com/sametyilmaztemel/remotyy/internal/config.Version=${{ github.ref_name }}" \
-            ./cmd/remotyy
+            go build -o dist/remotty-${{ matrix.goos }}-${{ matrix.goarch }} \
+            -ldflags="-s -w -X github.com/sametyilmaztemel/remotty/internal/config.Version=${{ github.ref_name }}" \
+            ./cmd/remotty
       
       - name: Package
         run: |
           cd dist
-          tar czf remotyy-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz \
-            remotyy-${{ matrix.goos }}-${{ matrix.goarch }}
+          tar czf remotty-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz \
+            remotty-${{ matrix.goos }}-${{ matrix.goarch }}
       
       - uses: actions/upload-artifact@v4
         with:
-          name: remotyy-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/remotyy-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+          name: remotty-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/remotty-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
 
   build-web:
     name: Build web client
@@ -52,12 +52,12 @@ jobs:
           cache-dependency-path: web/package-lock.json
       
       - run: cd web && npm ci && npm run build
-      - run: mkdir -p dist && cd web && tar czf ../dist/remotyy-web.tar.gz dist/
+      - run: mkdir -p dist && cd web && tar czf ../dist/remotty-web.tar.gz dist/
       
       - uses: actions/upload-artifact@v4
         with:
-          name: remotyy-web
-          path: dist/remotyy-web.tar.gz
+          name: remotty-web
+          path: dist/remotty-web.tar.gz
 
   build-macos-app:
     name: Build macOS app bundle
@@ -68,42 +68,42 @@ jobs:
         with:
           go-version: '1.22'
       
-      - name: Build remotyy binary (universal)
+      - name: Build remotty binary (universal)
         run: |
           mkdir -p dist
           GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build \
-            -o dist/remotyy-darwin-arm64 \
-            -ldflags="-s -w" ./cmd/remotyy
+            -o dist/remotty-darwin-arm64 \
+            -ldflags="-s -w" ./cmd/remotty
           GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build \
-            -o dist/remotyy-darwin-amd64 \
-            -ldflags="-s -w" ./cmd/remotyy
-          lipo -create -output dist/remotyy dist/remotyy-darwin-arm64 dist/remotyy-darwin-amd64
+            -o dist/remotty-darwin-amd64 \
+            -ldflags="-s -w" ./cmd/remotty
+          lipo -create -output dist/remotty dist/remotty-darwin-arm64 dist/remotty-darwin-amd64
       
       - name: Build SwiftUI app
         run: |
-          cd remotyy-macOS
-          swift build -c release --product remotyy
+          cd remotty-macOS
+          swift build -c release --product remotty
           cd ..
           
           # Create .app bundle
-          APP_BUNDLE="dist/remotyy.app"
+          APP_BUNDLE="dist/remotty.app"
           mkdir -p "$APP_BUNDLE/Contents/MacOS"
           mkdir -p "$APP_BUNDLE/Contents/Resources"
           
-          cp remotyy-macOS/.build/release/remotyy "$APP_BUNDLE/Contents/MacOS/"
-          cp remotyy-macOS/Info.plist "$APP_BUNDLE/Contents/"
+          cp remotty-macOS/.build/release/remotty "$APP_BUNDLE/Contents/MacOS/"
+          cp remotty-macOS/Info.plist "$APP_BUNDLE/Contents/"
           
           # Bundle the Go binary inside the app's Resources
-          cp dist/remotyy "$APP_BUNDLE/Contents/Resources/remotyyd"
+          cp dist/remotty "$APP_BUNDLE/Contents/Resources/remottyd"
           
           # Package as .tar.gz (no code sign — ad-hoc)
           cd dist
-          tar czf remotyy-macos-app.tar.gz remotyy.app
+          tar czf remotty-macos-app.tar.gz remotty.app
       
       - uses: actions/upload-artifact@v4
         with:
-          name: remotyy-macos-app
-          path: dist/remotyy-macos-app.tar.gz
+          name: remotty-macos-app
+          path: dist/remotty-macos-app.tar.gz
 
   release:
     name: Create Release
@@ -112,7 +112,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: remotyy-*
+          pattern: remotty-*
           merge-multiple: true
       
       - name: List artifacts

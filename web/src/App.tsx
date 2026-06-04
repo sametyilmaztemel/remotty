@@ -38,7 +38,7 @@ function App() {
         <aside className="sidebar">
           <div className="sidebar-header">
             <span className="logo">⎈</span>
-            <span className="logo-text">remotyy</span>
+            <span className="logo-text">remotty</span>
           </div>
           <nav className="sidebar-nav">
             <button

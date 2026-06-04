@@ -5,8 +5,8 @@ import (
 	"os"
 
 	"github.com/rs/zerolog/log"
-	"github.com/sametyilmaztemel/remotyy/internal/config"
-	"github.com/sametyilmaztemel/remotyy/internal/logging"
+	"github.com/sametyilmaztemel/remotty/internal/config"
+	"github.com/sametyilmaztemel/remotty/internal/logging"
 	"github.com/spf13/cobra"
 )
 
@@ -20,9 +20,9 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "remotyy",
+	Use:   "remotty",
 	Short: "Remote terminal & screen access via WebRTC",
-	Long: `remotyy — open-source remote access for your machines.
+	Long: `remotty — open-source remote access for your machines.
 
 Connect to your Mac or Linux server from anywhere via encrypted WebRTC.
 Features: terminal, screen sharing, file transfer, clipboard sync.`,

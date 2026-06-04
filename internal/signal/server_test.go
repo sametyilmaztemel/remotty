@@ -10,9 +10,9 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
-	"github.com/sametyilmaztemel/remotyy/internal/config"
-	"github.com/sametyilmaztemel/remotyy/internal/logging"
-	"github.com/sametyilmaztemel/remotyy/internal/protocol"
+	"github.com/sametyilmaztemel/remotty/internal/config"
+	"github.com/sametyilmaztemel/remotty/internal/logging"
+	"github.com/sametyilmaztemel/remotty/internal/protocol"
 )
 
 func newTestServer(t *testing.T) (*Server, *httptest.Server) {

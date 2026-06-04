@@ -8,14 +8,14 @@ import (
 	"syscall"
 
 	"github.com/rs/zerolog/log"
-	"github.com/sametyilmaztemel/remotyy/internal/client"
+	"github.com/sametyilmaztemel/remotty/internal/client"
 	"github.com/spf13/cobra"
 )
 
 var connectCmd = &cobra.Command{
 	Use:   "connect [host-id]",
 	Short: "Connect to a remote host",
-	Long: `Connect to a remotyy host for remote terminal access.
+	Long: `Connect to a remotty host for remote terminal access.
 If no host ID is given, lists available hosts.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -30,10 +30,10 @@ If no host ID is given, lists available hosts.`,
 		}
 
 		// Env overrides
-		if env := os.Getenv("REMOTYY_SIGNAL_URL"); env != "" && cfg.SignalURL == "" {
+		if env := os.Getenv("REMOTTY_SIGNAL_URL"); env != "" && cfg.SignalURL == "" {
 			cfg.SignalURL = env
 		}
-		if env := os.Getenv("REMOTYY_MASTER_PASSWORD"); env != "" && cfg.MasterPassword == "" {
+		if env := os.Getenv("REMOTTY_MASTER_PASSWORD"); env != "" && cfg.MasterPassword == "" {
 			cfg.MasterPassword = env
 		}
 
@@ -54,7 +54,7 @@ If no host ID is given, lists available hosts.`,
 				return fmt.Errorf("list hosts: %w", err)
 			}
 			if len(hosts) == 0 {
-				fmt.Println("No hosts available. Start a host with: remotyy host")
+				fmt.Println("No hosts available. Start a host with: remotty host")
 				return nil
 			}
 			fmt.Println("\nAvailable hosts:")

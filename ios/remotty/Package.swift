@@ -2,16 +2,16 @@
 import PackageDescription
 
 let package = Package(
-    name: "remotyy-ios",
+    name: "remotty-ios",
     defaultLocalization: "en",
     platforms: [
         .iOS(.v17),
     ],
     products: [
         .library(
-            name: "remotyy-ios",
+            name: "remotty-ios",
             type: .dynamic,
-            targets: ["remotyy-ios"]
+            targets: ["remotty-ios"]
         ),
     ],
     dependencies: [
@@ -20,13 +20,13 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "remotyy-ios",
+            name: "remotty-ios",
             dependencies: [
                 .product(name: "WebRTC", package: "webrtc-ios"),
             ],
             path: ".",
             sources: [
-                "remotyyApp.swift",
+                "remottyApp.swift",
                 "ContentView.swift",
                 "ConnectionView.swift",
                 "TerminalView.swift",

@@ -1,13 +1,13 @@
 #!/bin/bash
-# Cross-platform install script for remotyy
-# Usage: curl -fsSL https://remotyy.dev/install.sh | bash
+# Cross-platform install script for remotty
+# Usage: curl -fsSL https://remotty.dev/install.sh | bash
 set -euo pipefail
 
-REPO="remotyy/remotyy"
+REPO="remotty/remotty"
 VERSION="${1:-latest}"
 BIN_DIR="${BIN_DIR:-/usr/local/bin}"
 
-echo "⎈ Installing remotyy..."
+echo "⎈ Installing remotty..."
 
 # Detect OS and arch
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
@@ -24,14 +24,14 @@ if [ "$VERSION" = "latest" ]; then
 fi
 
 # Download
-URL="https://github.com/$REPO/releases/download/$VERSION/remotyy-${OS}-${ARCH}"
+URL="https://github.com/$REPO/releases/download/$VERSION/remotty-${OS}-${ARCH}"
 echo "⬇️  Downloading $URL..."
-curl -fsSL "$URL" -o "$BIN_DIR/remotyy"
-chmod +x "$BIN_DIR/remotyy"
+curl -fsSL "$URL" -o "$BIN_DIR/remotty"
+chmod +x "$BIN_DIR/remotty"
 
-echo "✅ remotyy $VERSION installed to $BIN_DIR/remotyy"
+echo "✅ remotty $VERSION installed to $BIN_DIR/remotty"
 echo ""
 echo "Quick start:"
-echo "  remotyy signal --dev     # Start signaling server"
-echo "  remotyy host             # Start host daemon"
-echo "  remotyy connect          # List and connect to hosts"
+echo "  remotty signal --dev     # Start signaling server"
+echo "  remotty host             # Start host daemon"
+echo "  remotty connect          # List and connect to hosts"

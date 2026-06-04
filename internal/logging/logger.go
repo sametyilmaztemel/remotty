@@ -1,4 +1,4 @@
-// Package logging provides centralized logging configuration for remotyy.
+// Package logging provides centralized logging configuration for remotty.
 package logging
 
 import (
@@ -12,7 +12,7 @@ import (
 	"github.com/rs/zerolog/pkgerrors"
 )
 
-// Logger wraps zerolog.Logger with remotyy-specific enhancements.
+// Logger wraps zerolog.Logger with remotty-specific enhancements.
 type Logger struct {
 	zerolog.Logger
 	Audit *AuditLogger

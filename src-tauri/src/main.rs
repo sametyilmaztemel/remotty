@@ -32,7 +32,7 @@ async fn connect_to_signal(url: String) -> Result<String, String> {
 
 #[tauri::command]
 async fn start_host(signal_url: String, name: String, password: String) -> Result<String, String> {
-    let mut cmd = Command::new("remotyy");
+    let mut cmd = Command::new("remotty");
     cmd.args(["host", "--signal", &signal_url, "--name", &name]);
     if !password.is_empty() {
         cmd.args(["--master-password", &password]);
@@ -52,13 +52,13 @@ fn main() {
         .setup(|app| {
             // Build system tray
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let show = MenuItem::with_id(app, "show", "Show remotyy", true, None::<&str>)?;
+            let show = MenuItem::with_id(app, "show", "Show remotty", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &quit])?;
 
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
-                .tooltip("remotyy")
+                .tooltip("remotty")
                 .on_menu_event(|app, event| {
                     match event.id.as_ref() {
                         "quit" => {

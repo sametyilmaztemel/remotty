@@ -15,8 +15,8 @@ COPY . .
 # Build binary with version injection
 ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags="-s -w -X github.com/sametyilmaztemel/remotyy/internal/config.Version=${VERSION}" \
-    -o remotyy ./cmd/remotyy
+    -ldflags="-s -w -X github.com/sametyilmaztemel/remotty/internal/config.Version=${VERSION}" \
+    -o remotty ./cmd/remotty
 
 # Web client build
 FROM node:22-alpine AS web-builder
@@ -33,21 +33,21 @@ FROM alpine:3.21
 RUN apk add --no-cache ca-certificates tzdata bash
 
 # Create non-root user
-RUN addgroup -S remotyy && adduser -S -G remotyy remotyy
+RUN addgroup -S remotty && adduser -S -G remotty remotty
 
 # Binary
-COPY --from=builder /build/remotyy /usr/local/bin/remotyy
+COPY --from=builder /build/remotty /usr/local/bin/remotty
 
 # Web UI (optional)
-COPY --from=web-builder /build/web/dist /opt/remotyy/web
+COPY --from=web-builder /build/web/dist /opt/remotty/web
 
 # Config directory
-RUN mkdir -p /etc/remotyy /var/lib/remotyy /var/log/remotyy && \
-    chown -R remotyy:remotyy /etc/remotyy /var/lib/remotyy /var/log/remotyy
+RUN mkdir -p /etc/remotty /var/lib/remotty /var/log/remotty && \
+    chown -R remotty:remotty /etc/remotty /var/lib/remotty /var/log/remotty
 
-USER remotyy
+USER remotty
 
 EXPOSE 9000
 
-ENTRYPOINT ["remotyy"]
+ENTRYPOINT ["remotty"]
 CMD ["signal"]

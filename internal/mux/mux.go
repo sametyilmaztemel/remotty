@@ -1,4 +1,4 @@
-// Package mux provides connection multiplexing for remotyy.
+// Package mux provides connection multiplexing for remotty.
 package mux
 
 import (

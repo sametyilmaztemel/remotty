@@ -63,7 +63,7 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
       const barcodes = await detector.detect(canvas);
       for (const barcode of barcodes) {
         const url = barcode.rawValue;
-        if (url && (url.startsWith('remotyy://') || url.startsWith('ws://') || url.startsWith('wss://'))) {
+        if (url && (url.startsWith('remotty://') || url.startsWith('ws://') || url.startsWith('wss://'))) {
           stopCamera();
           onScan(url);
           return;
@@ -108,7 +108,7 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
       </div>
 
       <p style={{ color: '#fff', margin: '16px 0 8px', fontSize: 14 }}>
-        Point camera at a remotyy QR code
+        Point camera at a remotty QR code
       </p>
       {error && <p style={{ color: '#ef4444', fontSize: 12, marginBottom: 8 }}>{error}</p>}
 

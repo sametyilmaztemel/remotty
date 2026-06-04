@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest an idea for remotyy
+about: Suggest an idea for remotty
 title: ''
 labels: enhancement
 assignees: ''

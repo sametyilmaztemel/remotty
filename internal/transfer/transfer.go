@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sametyilmaztemel/remotyy/internal/protocol"
+	"github.com/sametyilmaztemel/remotty/internal/protocol"
 )
 
 const DefaultChunkSize = 65536 // 64KB

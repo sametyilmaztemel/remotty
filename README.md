@@ -1,10 +1,10 @@
-# remotyy
+# remotty
 
 > **Remote terminal & screen access via WebRTC**  
 > Cross-platform host daemon + web/CLI/native clients.  
 > Open source, unlimited, free.
 
-remotyy gives you secure, encrypted remote access to any machine — your Mac, a Linux server, a Raspberry Pi, or a cloud VM — directly from your browser, terminal, or native app. No open ports, no VPN, no SSH key management.
+remotty gives you secure, encrypted remote access to any machine — your Mac, a Linux server, a Raspberry Pi, or a cloud VM — directly from your browser, terminal, or native app. No open ports, no VPN, no SSH key management.
 
 No session limits, no device limits, no time limits. Everything is free and open source.
 
@@ -30,7 +30,7 @@ No session limits, no device limits, no time limits. Everything is free and open
 - **🔒 E2E Encrypted** — WebRTC DTLS-SRTP, end-to-end encrypted tunnel
 - **🌐 Cross-platform host** — macOS, Linux (ARM64/AMD64), Windows
 - **🖥 Web client** — Terminal in your browser via xterm.js
-- **📟 CLI client** — `remotyy connect` from any terminal
+- **📟 CLI client** — `remotty connect` from any terminal
 - **📱 iOS app** — Native SwiftUI client
 - **🖥 macOS app** — Menu bar host controller
 - **🔑 Dual-layer auth** — Signaling token + Master Password (bcrypt)
@@ -49,31 +49,31 @@ No session limits, no device limits, no time limits. Everything is free and open
 
 ```bash
 # Clone and build
-git clone https://github.com/remotyy/remotyy.git
-cd remotyy
-go build ./cmd/remotyy
+git clone https://github.com/remotty/remotty.git
+cd remotty
+go build ./cmd/remotty
 
 # Start signaling server (dev mode)
-./remotyy signal --dev --port 9000
+./remotty signal --dev --port 9000
 ```
 
 ### 2. Host Daemon
 
 ```bash
-./remotyy host --signal ws://your-server:9000 --name "my-machine"
+./remotty host --signal ws://your-server:9000 --name "my-machine"
 ```
 
 With a master password (recommended):
 
 ```bash
-./remotyy host --signal ws://your-server:9000 --name "my-machine" \
+./remotty host --signal ws://your-server:9000 --name "my-machine" \
   --master-password "your-secret-password"
 ```
 
 Or use QR pairing (zero-config):
 
 ```bash
-./remotyy host --signal ws://your-server:9000 --qr
+./remotty host --signal ws://your-server:9000 --qr
 # → Scan QR code with phone to connect instantly
 ```
 
@@ -88,10 +88,10 @@ cd web && npm install && npm run dev
 **CLI client:**
 ```bash
 # List available hosts
-./remotyy connect --signal ws://your-server:9000
+./remotty connect --signal ws://your-server:9000
 
 # Connect to a host
-./remotyy connect host-id --signal ws://your-server:9000
+./remotty connect host-id --signal ws://your-server:9000
 ```
 
 ## Build
@@ -107,8 +107,8 @@ make build-dmg            # macOS .dmg package
 ## Architecture
 
 ```
-remotyy/
-├── cmd/remotyy/           # CLI (signal | host | connect)
+remotty/
+├── cmd/remotty/           # CLI (signal | host | connect)
 ├── internal/
 │   ├── auth/              # bcrypt/argon2 password hashing
 │   ├── config/            # Viper config
@@ -124,7 +124,7 @@ remotyy/
 │   └── logging/           # Audit logging
 ├── web/                   # React + TypeScript client
 ├── ios/                   # iOS SwiftUI app
-├── remotyy-macOS/          # macOS menu bar app
+├── remotty-macOS/          # macOS menu bar app
 ├── src-tauri/             # Tauri desktop wrapper
 ├── tui/                   # Bubble Tea TUI client
 ├── deploy/                # Docker, systemd, launchd

@@ -1,4 +1,4 @@
-// Package config provides centralized configuration for all remotyy components.
+// Package config provides centralized configuration for all remotty components.
 // Supports loading from YAML file, environment variables, and CLI flags.
 package config
 
@@ -141,17 +141,17 @@ func Load(configPath string) (*Config, error) {
 
 	// Env bindings
 	envBindings := map[string]string{
-		"signal.auth_token":    "REMOTYY_AUTH_TOKEN",
-		"host.signal_url":     "REMOTYY_SIGNAL_URL",
-		"host.master_password":"REMOTYY_MASTER_PASSWORD",
-		"host.name":           "REMOTYY_HOST_NAME",
-		"host.device_id":      "REMOTYY_DEVICE_ID",
-		"client.signal_url":   "REMOTYY_SIGNAL_URL",
-		"client.master_password":"REMOTYY_MASTER_PASSWORD",
-		"signal.tls.cert_file":"REMOTYY_TLS_CERT",
-		"signal.tls.key_file": "REMOTYY_TLS_KEY",
-		"logging.level":       "REMOTYY_LOG_LEVEL",
-		"logging.file":        "REMOTYY_LOG_FILE",
+		"signal.auth_token":    "REMOTTY_AUTH_TOKEN",
+		"host.signal_url":     "REMOTTY_SIGNAL_URL",
+		"host.master_password":"REMOTTY_MASTER_PASSWORD",
+		"host.name":           "REMOTTY_HOST_NAME",
+		"host.device_id":      "REMOTTY_DEVICE_ID",
+		"client.signal_url":   "REMOTTY_SIGNAL_URL",
+		"client.master_password":"REMOTTY_MASTER_PASSWORD",
+		"signal.tls.cert_file":"REMOTTY_TLS_CERT",
+		"signal.tls.key_file": "REMOTTY_TLS_KEY",
+		"logging.level":       "REMOTTY_LOG_LEVEL",
+		"logging.file":        "REMOTTY_LOG_FILE",
 	}
 	for key, env := range envBindings {
 		v.MustBindEnv(key, env)
@@ -161,11 +161,11 @@ func Load(configPath string) (*Config, error) {
 	if configPath != "" {
 		v.SetConfigFile(configPath)
 	} else {
-		v.SetConfigName("remotyy")
+		v.SetConfigName("remotty")
 		v.SetConfigType("yaml")
 		v.AddConfigPath(".")
-		v.AddConfigPath("$HOME/.remotyy")
-		v.AddConfigPath("/etc/remotyy")
+		v.AddConfigPath("$HOME/.remotty")
+		v.AddConfigPath("/etc/remotty")
 	}
 
 	// Read config
@@ -221,9 +221,9 @@ func (l *LoggingConfig) ParseLevel() zerolog.Level {
 func defaultDataDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "/tmp/remotyy"
+		return "/tmp/remotty"
 	}
-	return filepath.Join(home, ".remotyy")
+	return filepath.Join(home, ".remotty")
 }
 
 // Validate checks the config for common issues.

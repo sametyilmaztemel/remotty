@@ -1,4 +1,4 @@
-# remotyy Screen Sharing + iOS App — Development Plan
+# remotty Screen Sharing + iOS App — Development Plan
 
 ## Overview
 
@@ -34,7 +34,7 @@ Two features that must work together:
 | `input_darwin.go` | Klavye/fare enjeksiyonu | CGEventCreate, CGEventPost |
 | `input.go` | Event protokolü | MouseMove, MouseClick, KeyPress |
 
-### B. iOS App (`ios/remotyy/`)
+### B. iOS App (`ios/remotty/`)
 
 | Modül | Görev |
 |-------|-------|
@@ -222,12 +222,12 @@ internal/screen/capture_darwin.go    — CGDisplay capture (CGO)
 internal/screen/encoder.go           — JPEG encode
 internal/screen/input_darwin.go      — CGEvent injection (CGO)
 internal/screen/stream.go            — WebRTC video track management
-ios/remotyy/ScreenView.swift          — iOS screen display
-ios/remotyy/WebRTCService.swift       — iOS WebRTC
-ios/remotyy/TouchHandler.swift        — iOS touch → coordinates
-ios/remotyy/Assets.xcassets/          — iOS app icons
-ios/remotyy/Info.plist                — iOS app config
-remotyy-macOS/ScreenCaptureManager.swift — macOS native capture (alt)
+ios/remotty/ScreenView.swift          — iOS screen display
+ios/remotty/WebRTCService.swift       — iOS WebRTC
+ios/remotty/TouchHandler.swift        — iOS touch → coordinates
+ios/remotty/Assets.xcassets/          — iOS app icons
+ios/remotty/Info.plist                — iOS app config
+remotty-macOS/ScreenCaptureManager.swift — macOS native capture (alt)
 ```
 
 ### Modified files:

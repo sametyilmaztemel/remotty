@@ -52,7 +52,7 @@ export default function HostList({ onSelect }: Props) {
           <div className="empty-state">
             <span className="empty-icon">⎈</span>
             <p>No hosts online</p>
-            <p className="hint">Start a host: <code>remotyy host</code></p>
+            <p className="hint">Start a host: <code>remotty host</code></p>
           </div>
         )}
 
@@ -83,7 +83,7 @@ export default function HostList({ onSelect }: Props) {
             {qrHost?.id === host.id && (
               <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 8 }}>
                 <QRCode
-                  data={`remotyy://connect/${encodeURIComponent(JSON.stringify({
+                  data={`remotty://connect/${encodeURIComponent(JSON.stringify({
                     signal: client?.getUrl() || '',
                     host: host.id,
                     name: host.name,
@@ -91,7 +91,7 @@ export default function HostList({ onSelect }: Props) {
                   size={180}
                 />
                 <p style={{ textAlign: 'center', fontSize: 10, color: '#666', marginTop: 4 }}>
-                  Scan with remotyy app
+                  Scan with remotty app
                 </p>
               </div>
             )}

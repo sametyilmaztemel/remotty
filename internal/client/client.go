@@ -1,4 +1,4 @@
-// Package client provides the remotyy client for connecting to remote hosts.
+// Package client provides the remotty client for connecting to remote hosts.
 package client
 import (
 	"context"
@@ -8,9 +8,9 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
-	"github.com/sametyilmaztemel/remotyy/internal/config"
-	"github.com/sametyilmaztemel/remotyy/internal/protocol"
-	"github.com/sametyilmaztemel/remotyy/internal/webrtc"
+	"github.com/sametyilmaztemel/remotty/internal/config"
+	"github.com/sametyilmaztemel/remotty/internal/protocol"
+	"github.com/sametyilmaztemel/remotty/internal/webrtc"
 	"golang.org/x/term"
 )
 

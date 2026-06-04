@@ -31,8 +31,8 @@ export default function HelpView() {
             <strong>Same WiFi network</strong>
             <ol style={{ margin: '8px 0', paddingLeft: 20 }}>
               <li>Mac'te terminal açın</li>
-              <li><code style={{ background: 'var(--bg)', padding: '1px 4px', borderRadius: 3 }}>remotyy signal --dev</code></li>
-              <li><code style={{ background: 'var(--bg)', padding: '1px 4px', borderRadius: 3 }}>remotyy host --signal ws://localhost:9000</code></li>
+              <li><code style={{ background: 'var(--bg)', padding: '1px 4px', borderRadius: 3 }}>remotty signal --dev</code></li>
+              <li><code style={{ background: 'var(--bg)', padding: '1px 4px', borderRadius: 3 }}>remotty host --signal ws://localhost:9000</code></li>
               <li>Mac'in IP'sini bulun: <code style={{ background: 'var(--bg)', padding: '1px 4px', borderRadius: 3 }}>ipconfig getifaddr en0</code></li>
               <li>iPhone Safari: <code style={{ background: 'var(--bg)', padding: '1px 4px', borderRadius: 3 }}>http://&lt;MAC_IP&gt;:3000</code></li>
               <li>Signaling URL: <code style={{ background: 'var(--bg)', padding: '1px 4px', borderRadius: 3 }}>ws://&lt;MAC_IP&gt;:9000</code></li>
@@ -67,7 +67,7 @@ export default function HelpView() {
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
                 <th style={{ textAlign: 'left', padding: 6, color: 'var(--text-dim)', fontWeight: 500 }}>Feature</th>
                 <th style={{ textAlign: 'center', padding: 6, color: 'var(--text-dim)', fontWeight: 500 }}>Macky</th>
-                <th style={{ textAlign: 'center', padding: 6, color: 'var(--text-dim)', fontWeight: 500 }}>remotyy</th>
+                <th style={{ textAlign: 'center', padding: 6, color: 'var(--text-dim)', fontWeight: 500 }}>remotty</th>
               </tr>
             </thead>
             <tbody>
@@ -87,11 +87,11 @@ export default function HelpView() {
                 ['iOS native app', '✅', '🚧'],
                 ['macOS menu bar', '✅', '✅'],
                 ['Free', '❌ ($29)', '✅'],
-              ].map(([feature, macky, remotyy]) => (
+              ].map(([feature, macky, remotty]) => (
                 <tr key={feature} style={{ borderBottom: '1px solid var(--border)' }}>
                   <td style={{ padding: '5px 6px' }}>{feature}</td>
                   <td style={{ padding: '5px 6px', textAlign: 'center' }}>{macky}</td>
-                  <td style={{ padding: '5px 6px', textAlign: 'center' }}>{remotyy}</td>
+                  <td style={{ padding: '5px 6px', textAlign: 'center' }}>{remotty}</td>
                 </tr>
               ))}
             </tbody>
@@ -102,14 +102,14 @@ export default function HelpView() {
       {tab === 'about' && (
         <div style={{ fontSize: 12, lineHeight: 1.7, textAlign: 'center', paddingTop: 40 }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>⎈</div>
-          <h2 style={{ color: 'var(--text-bright)', marginBottom: 4 }}>remotyy</h2>
+          <h2 style={{ color: 'var(--text-bright)', marginBottom: 4 }}>remotty</h2>
           <p style={{ color: 'var(--text-dim)', marginBottom: 16 }}>
             remote terminal &middot; open source
           </p>
           <p>Version 0.5.1</p>
           <p style={{ marginTop: 8 }}>
-            <a href="https://github.com/remotyy/remotyy" style={{ color: 'var(--accent)' }}>
-              github.com/remotyy/remotyy
+            <a href="https://github.com/remotty/remotty" style={{ color: 'var(--accent)' }}>
+              github.com/remotty/remotty
             </a>
           </p>
         </div>

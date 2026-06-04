@@ -22,8 +22,8 @@ func TestRootCmdHelp(t *testing.T) {
 	}
 
 	output := buf.String()
-	if !strings.Contains(output, "remotyy") {
-		t.Error("help output should contain 'remotyy'")
+	if !strings.Contains(output, "remotty") {
+		t.Error("help output should contain 'remotty'")
 	}
 	if !strings.Contains(output, "Usage") {
 		t.Error("help output should contain 'Usage'")
@@ -117,10 +117,10 @@ func TestJoinStrings(t *testing.T) {
 
 func TestEnvOverride(t *testing.T) {
 	// Set env vars
-	os.Setenv("REMOTYY_AUTH_TOKEN", "test-token-123")
-	defer os.Unsetenv("REMOTYY_AUTH_TOKEN")
+	os.Setenv("REMOTTY_AUTH_TOKEN", "test-token-123")
+	defer os.Unsetenv("REMOTTY_AUTH_TOKEN")
 
-	token := os.Getenv("REMOTYY_AUTH_TOKEN")
+	token := os.Getenv("REMOTTY_AUTH_TOKEN")
 	if token != "test-token-123" {
 		t.Errorf("env override = %q, want test-token-123", token)
 	}

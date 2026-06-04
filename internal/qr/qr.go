@@ -18,10 +18,10 @@ type PairingURL struct {
 	Token    string `json:"token,omitempty"`
 }
 
-// Encode creates a remotyy:// URL from pairing info.
+// Encode creates a remotty:// URL from pairing info.
 func (p PairingURL) Encode() string {
 	data, _ := json.Marshal(p)
-	return fmt.Sprintf("remotyy://connect/%s", strings.TrimRight(string(data), "\n"))
+	return fmt.Sprintf("remotty://connect/%s", strings.TrimRight(string(data), "\n"))
 }
 
 // Generate creates a QR code as an ANSI terminal string.
@@ -50,12 +50,12 @@ func GenerateSmall(p PairingURL) (qrArt, url string, err error) {
 	return qrArt, url, nil
 }
 
-// DecodeURL parses a remotyy:// URL back into pairing info.
+// DecodeURL parses a remotty:// URL back into pairing info.
 func DecodeURL(raw string) (*PairingURL, error) {
-	if !strings.HasPrefix(raw, "remotyy://connect/") {
-		return nil, fmt.Errorf("invalid remotyy URL: %s", raw)
+	if !strings.HasPrefix(raw, "remotty://connect/") {
+		return nil, fmt.Errorf("invalid remotty URL: %s", raw)
 	}
-	payload := strings.TrimPrefix(raw, "remotyy://connect/")
+	payload := strings.TrimPrefix(raw, "remotty://connect/")
 	var p PairingURL
 	if err := json.Unmarshal([]byte(payload), &p); err != nil {
 		return nil, fmt.Errorf("decode pairing data: %w", err)

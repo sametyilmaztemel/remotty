@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sametyilmaztemel/remotyy/internal/protocol"
+	"github.com/sametyilmaztemel/remotty/internal/protocol"
 )
 
 func TestNewManager(t *testing.T) {

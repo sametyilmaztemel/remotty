@@ -3,16 +3,16 @@
 Creating a single Go binary from scratch.
 
 ```
-go build -o remotyy-host ./cmd/remotyy-host
-go build -o remotyy-signal ./cmd/remotyy-signal
-go build -o remotyy ./cmd/remotyy
+go build -o remotty-host ./cmd/remotty-host
+go build -o remotty-signal ./cmd/remotty-signal
+go build -o remotty ./cmd/remotty
 ```
 
 Cross-compile for ARM:
 
 ```
-GOOS=linux GOARCH=arm64 go build -o remotyy-host-linux-arm64 ./cmd/remotyy-host
-GOOS=linux GOARCH=arm64 go build -o remotyy-signal-linux-arm64 ./cmd/remotyy-signal
+GOOS=linux GOARCH=arm64 go build -o remotty-host-linux-arm64 ./cmd/remotty-host
+GOOS=linux GOARCH=arm64 go build -o remotty-signal-linux-arm64 ./cmd/remotty-signal
 ```
 
 ## Dependencies

@@ -1,4 +1,4 @@
-// Package protocol defines all wire-format messages for remotyy signaling and data channels.
+// Package protocol defines all wire-format messages for remotty signaling and data channels.
 package protocol
 
 import "encoding/json"

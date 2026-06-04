@@ -2,14 +2,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "remotyy",
+    name: "remotty",
     platforms: [
         .macOS(.v14),
         .iOS(.v17),
     ],
     products: [
-        .executable(name: "remotyy-macOS", targets: ["remotyy-macOS"]),
-        .library(name: "remotyy-ios", targets: ["remotyy-ios"]),
+        .executable(name: "remotty-macOS", targets: ["remotty-macOS"]),
+        .library(name: "remotty-ios", targets: ["remotty-ios"]),
     ],
     dependencies: [
         // WebRTC SDK for iOS/macOS
@@ -17,21 +17,21 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "remotyy-macOS",
+            name: "remotty-macOS",
             dependencies: [],
-            path: "remotyy-macOS",
+            path: "remotty-macOS",
             sources: [
-                "remotyyMenuBarApp.swift",
+                "remottyMenuBarApp.swift",
                 "MenuBarView.swift",
                 "SettingsView.swift",
             ]
         ),
         .target(
-            name: "remotyy-ios",
+            name: "remotty-ios",
             dependencies: [],
-            path: "ios/remotyy",
+            path: "ios/remotty",
             sources: [
-                "remotyyApp.swift",
+                "remottyApp.swift",
                 "ContentView.swift",
                 "ConnectionView.swift",
                 "TerminalView.swift",

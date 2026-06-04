@@ -1,4 +1,4 @@
-// Package webrtc provides a high-level WebRTC engine for remotyy.
+// Package webrtc provides a high-level WebRTC engine for remotty.
 package webrtc
 
 import (
@@ -10,7 +10,7 @@ import (
 	"github.com/pion/interceptor"
 	pion "github.com/pion/webrtc/v4"
 	"github.com/rs/zerolog/log"
-	"github.com/sametyilmaztemel/remotyy/internal/protocol"
+	"github.com/sametyilmaztemel/remotty/internal/protocol"
 )
 
 // Engine manages a WebRTC peer connection with data channels.

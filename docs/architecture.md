@@ -2,7 +2,7 @@
 
 ## Overview
 
-remotyy uses a **signaling server + WebRTC P2P** architecture:
+remotty uses a **signaling server + WebRTC P2P** architecture:
 
 1. **Host daemon** connects to signaling server via WebSocket, registers itself
 2. **Client** connects to same signaling server, requests available hosts
@@ -104,7 +104,7 @@ Layer 1: Transport Security
 └── Perfect Forward Secrecy — Ephemeral key exchange
 
 Layer 2: Signal Authentication
-├── Bearer Token — REMOTYY_AUTH_TOKEN on signaling server
+├── Bearer Token — REMOTTY_AUTH_TOKEN on signaling server
 └── Token verification on connect
 
 Layer 3: Device Authorization

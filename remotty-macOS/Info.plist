@@ -5,15 +5,15 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>remotyy</string>
+    <string>remotty</string>
     <key>CFBundleExecutable</key>
-    <string>remotyy</string>
+    <string>remotty</string>
     <key>CFBundleIdentifier</key>
-    <string>com.remotyy.macos</string>
+    <string>com.remotty.macos</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>remotyy</string>
+    <string>remotty</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -29,6 +29,6 @@
     <key>NSHumanReadableCopyright</key>
     <string>MIT License</string>
     <key>NSSystemAdministrationUsageDescription</key>
-    <string>remotyy needs permission to run the host daemon for remote terminal access.</string>
+    <string>remotty needs permission to run the host daemon for remote terminal access.</string>
 </dict>
 </plist>

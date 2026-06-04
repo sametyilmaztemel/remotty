@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicegui/nicegui/main/nicegui/static/tauri/tauri.conf.json",
-  "productName": "remotyy",
+  "productName": "remotty",
   "version": "0.3.0",
-  "identifier": "com.remotyy.app",
+  "identifier": "com.remotty.app",
   "build": {
     "frontendDist": "../web/dist",
     "devUrl": "http://localhost:3000",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "remotyy — remote terminal",
+        "title": "remotty — remote terminal",
         "width": 1100,
         "height": 700,
         "minWidth": 700,

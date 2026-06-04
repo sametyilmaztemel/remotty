@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Xcode project generator for remotyy macOS app.
+Xcode project generator for remotty macOS app.
 Generates a proper .xcodeproj from Swift source files.
 Usage: python3 scripts/gen-xcode-project.py
 """
@@ -11,8 +11,8 @@ import uuid
 import shutil
 
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MACOS_DIR = os.path.join(PROJECT_DIR, "remotyy-macOS")
-XCODE_PROJ = os.path.join(PROJECT_DIR, "remotyy-macOS", "remotyy.xcodeproj")
+MACOS_DIR = os.path.join(PROJECT_DIR, "remotty-macOS")
+XCODE_PROJ = os.path.join(PROJECT_DIR, "remotty-macOS", "remotty.xcodeproj")
 PBX_FILE = os.path.join(XCODE_PROJ, "project.pbxproj")
 
 def new_id():
@@ -23,7 +23,7 @@ def build_pbx():
     
     # File References
     files = {
-        "remotyyMenuBarApp.swift": new_id(),
+        "remottyMenuBarApp.swift": new_id(),
         "MenuBarView.swift": new_id(),
         "SettingsView.swift": new_id(),
         "Info.plist": new_id(),
@@ -86,12 +86,12 @@ def build_pbx():
     pbx["objects"][src_group_id] = {
         "isa": "PBXGroup",
         "children": [
-            files["remotyyMenuBarApp.swift"],
+            files["remottyMenuBarApp.swift"],
             files["MenuBarView.swift"],
             files["SettingsView.swift"],
             files["Info.plist"],
         ],
-        "name": "remotyy",
+        "name": "remotty",
         "sourceTree": "<group>",
     }
     
@@ -113,7 +113,7 @@ def build_pbx():
         "isa": "PBXFileReference",
         "explicitFileType": "wrapper.application",
         "includeInIndex": 0,
-        "path": "remotyy.app",
+        "path": "remotty.app",
         "sourceTree": "BUILT_PRODUCTS_DIR",
     }
     
@@ -122,7 +122,7 @@ def build_pbx():
         "isa": "PBXSourcesBuildPhase",
         "buildActionMask": 2147483647,
         "files": [
-            build_files["remotyyMenuBarApp.swift"],
+            build_files["remottyMenuBarApp.swift"],
             build_files["MenuBarView.swift"],
             build_files["SettingsView.swift"],
         ],
@@ -164,7 +164,7 @@ def build_pbx():
             ],
             "MACOSX_DEPLOYMENT_TARGET": "14.0",
             "MARKETING_VERSION": "0.5.0",
-            "PRODUCT_BUNDLE_IDENTIFIER": "com.remotyy.macos",
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.remotty.macos",
             "PRODUCT_NAME": "$(TARGET_NAME)",
             "SDKROOT": "macosx",
             "SWIFT_VERSION": "5.0",
@@ -192,7 +192,7 @@ def build_pbx():
             ],
             "MACOSX_DEPLOYMENT_TARGET": "14.0",
             "MARKETING_VERSION": "0.5.0",
-            "PRODUCT_BUNDLE_IDENTIFIER": "com.remotyy.macos",
+            "PRODUCT_BUNDLE_IDENTIFIER": "com.remotty.macos",
             "PRODUCT_NAME": "$(TARGET_NAME)",
             "SDKROOT": "macosx",
             "SWIFT_VERSION": "5.0",
@@ -216,8 +216,8 @@ def build_pbx():
         "buildPhases": [sources_id, frameworks_id, resources_id],
         "buildRules": [],
         "dependencies": [],
-        "name": "remotyy",
-        "productName": "remotyy",
+        "name": "remotty",
+        "productName": "remotty",
         "productReference": product_ref_id,
         "productType": "com.apple.product-type.application",
     }
@@ -324,7 +324,7 @@ def main():
     print(f"   open {XCODE_PROJ}")
     print(f"")
     print(f"To build:")
-    print(f"   xcodebuild -project {XCODE_PROJ} -scheme remotyy -configuration Release build")
+    print(f"   xcodebuild -project {XCODE_PROJ} -scheme remotty -configuration Release build")
 
 
 if __name__ == "__main__":

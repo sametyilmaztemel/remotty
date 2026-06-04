@@ -1,9 +1,9 @@
 #!/bin/bash
-# Build script for remotyy native apps
+# Build script for remotty native apps
 set -e
 
 echo "╔════════════════════════════════════════════╗"
-echo "║        remotyy — Native App Builder        ║"
+echo "║        remotty — Native App Builder        ║"
 echo "╚════════════════════════════════════════════╝"
 
 build_tauri() {
@@ -17,7 +17,7 @@ build_tauri() {
     fi
     
     cargo build --release 2>&1 | tail -5
-    echo "✅ Tauri build complete: target/release/remotyy"
+    echo "✅ Tauri build complete: target/release/remotty"
     cd ..
 }
 
@@ -31,8 +31,8 @@ build_ios() {
     fi
     
     cd ios
-    xcodebuild -project remotyy.xcodeproj \
-        -scheme remotyy \
+    xcodebuild -project remotty.xcodeproj \
+        -scheme remotty \
         -configuration Release \
         -sdk iphoneos \
         -derivedDataPath build \
@@ -46,9 +46,9 @@ build_macos() {
     echo ""
     echo "🖥  Building macOS native app..."
     
-    cd remotyy-macOS
+    cd remotty-macOS
     swift build -c release 2>&1 | tail -5
-    echo "✅ macOS build complete: .build/release/remotyy-macOS"
+    echo "✅ macOS build complete: .build/release/remotty-macOS"
     cd ..
 }
 

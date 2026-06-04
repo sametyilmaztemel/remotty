@@ -1,4 +1,4 @@
-// Package main implements a Bubble Tea TUI client for remotyy.
+// Package main implements a Bubble Tea TUI client for remotty.
 package main
 
 import (
@@ -8,8 +8,8 @@ import (
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/rs/zerolog"
-	"github.com/sametyilmaztemel/remotyy/internal/client"
-	"github.com/sametyilmaztemel/remotyy/internal/config"
+	"github.com/sametyilmaztemel/remotty/internal/client"
+	"github.com/sametyilmaztemel/remotty/internal/config"
 )
 
 var (
@@ -113,7 +113,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	s := titleStyle.Render(" ⎈ remotyy — TUI Client ") + "\n\n"
+	s := titleStyle.Render(" ⎈ remotty — TUI Client ") + "\n\n"
 
 	if m.state == "init" {
 		s += statusStyle.Render(" Connecting...")

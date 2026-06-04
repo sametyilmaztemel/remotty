@@ -28,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateIcon() {
         guard let b = statusItem?.button else { return }
         let name = host.isRunning ? "terminal.fill" : "terminal"
-        let img = NSImage(systemSymbolName: name, accessibilityDescription: "remotyy")
+        let img = NSImage(systemSymbolName: name, accessibilityDescription: "remotty")
         let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
         b.image = img?.withSymbolConfiguration(config)
     }
@@ -80,7 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(seti)
 
         // Quit
-        let qi = NSMenuItem(title: "Quit remotyy", action: #selector(quitApp), keyEquivalent: "q")
+        let qi = NSMenuItem(title: "Quit remotty", action: #selector(quitApp), keyEquivalent: "q")
         menu.addItem(qi)
 
         statusItem.menu = menu
@@ -114,7 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             contentRect: NSRect(x: 0, y: 0, width: 380, height: 260),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered, defer: false)
-        window.title = "remotyy Settings"
+        window.title = "remotty Settings"
         window.center()
 
         let content = NSView(frame: NSRect(x: 0, y: 0, width: 380, height: 260))
@@ -154,7 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sep.boxType = .separator
 
         // Version
-        let versionLabel = NSTextField(labelWithString: "remotyy 0.7.1")
+        let versionLabel = NSTextField(labelWithString: "remotty 0.7.1")
         versionLabel.frame = NSRect(x: 20, y: 95, width: 200, height: 20)
         versionLabel.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)
         versionLabel.textColor = .secondaryLabelColor

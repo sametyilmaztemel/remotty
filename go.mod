@@ -1,4 +1,4 @@
-module github.com/sametyilmaztemel/remotyy
+module github.com/sametyilmaztemel/remotty
 
 go 1.24.0
 
@@ -10,6 +10,7 @@ require (
 	github.com/pion/interceptor v0.1.37
 	github.com/pion/webrtc/v4 v4.0.0
 	github.com/rs/zerolog v1.33.0
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/viper v1.19.0
 	golang.org/x/crypto v0.28.0
@@ -56,7 +57,6 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sagikazarmark/locafero v0.4.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
-	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spf13/afero v1.11.0 // indirect
 	github.com/spf13/cast v1.6.0 // indirect

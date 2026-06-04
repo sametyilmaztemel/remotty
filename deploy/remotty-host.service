@@ -1,0 +1,22 @@
+# remotty-host (host daemon)
+# requires: REMOTTY_SIGNAL_URL, REMOTTY_MASTER_PASSWORD (optional)
+
+[Unit]
+Description=remotty Host Daemon
+After=network.target remotty-signal.service
+Wants=remotty-signal.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/remotty
+EnvironmentFile=/etc/remotty/host.env
+ExecStart=/home/ubuntu/remotty/remotty-host \
+  --signal ${REMOTTY_SIGNAL_URL} \
+  --name ${REMOTTY_HOST_NAME:-arm-oracle} \
+  ${REMOTTY_MASTER_PASSWORD:+--master-password ${REMOTTY_MASTER_PASSWORD}}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

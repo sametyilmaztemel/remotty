@@ -8,16 +8,16 @@ import (
 	"syscall"
 
 	"github.com/rs/zerolog/log"
-	"github.com/sametyilmaztemel/remotyy/internal/config"
-	"github.com/sametyilmaztemel/remotyy/internal/host"
-	"github.com/sametyilmaztemel/remotyy/internal/qr"
+	"github.com/sametyilmaztemel/remotty/internal/config"
+	"github.com/sametyilmaztemel/remotty/internal/host"
+	"github.com/sametyilmaztemel/remotty/internal/qr"
 	"github.com/spf13/cobra"
 )
 
 var hostCmd = &cobra.Command{
 	Use:   "host",
 	Short: "Start the host daemon",
-	Long: `Start the remotyy host daemon on this machine.
+	Long: `Start the remotty host daemon on this machine.
 Connects to signaling server and waits for client connections.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := globalCfg.Host
@@ -39,10 +39,10 @@ Connects to signaling server and waits for client connections.`,
 		}
 
 		// Env overrides (lowest priority)
-		if env := os.Getenv("REMOTYY_SIGNAL_URL"); env != "" && cfg.SignalURL == "" {
+		if env := os.Getenv("REMOTTY_SIGNAL_URL"); env != "" && cfg.SignalURL == "" {
 			cfg.SignalURL = env
 		}
-		if env := os.Getenv("REMOTYY_MASTER_PASSWORD"); env != "" && cfg.MasterPassword == "" {
+		if env := os.Getenv("REMOTTY_MASTER_PASSWORD"); env != "" && cfg.MasterPassword == "" {
 			cfg.MasterPassword = env
 		}
 
