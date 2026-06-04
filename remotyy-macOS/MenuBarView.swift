@@ -3,6 +3,7 @@ import SwiftUI
 struct MenuBarView: View {
     @EnvironmentObject private var host: HostManager
     @State private var showSettings = false
+    @State private var showQR = false
     
     var body: some View {
         VStack(spacing: 0) {
@@ -10,12 +11,16 @@ struct MenuBarView: View {
             Divider()
             StatusSection(host: host)
             Divider()
-            ActionButtons(host: host, showSettings: $showSettings)
+            ActionButtons(host: host, showSettings: $showSettings, showQR: $showQR)
         }
         .frame(width: 280)
         .sheet(isPresented: $showSettings) {
             SettingsView()
                 .environmentObject(host)
+        }
+        .sheet(isPresented: $showQR) {
+            QRHostView(host: host)
+                .frame(width: 320, height: 400)
         }
     }
 }
@@ -126,6 +131,7 @@ private struct StatusRow: View {
 private struct ActionButtons: View {
     @ObservedObject var host: HostManager
     @Binding var showSettings: Bool
+    @Binding var showQR: Bool
     
     var body: some View {
         VStack(spacing: 6) {
@@ -147,6 +153,14 @@ private struct ActionButtons: View {
             }
             
             HStack(spacing: 6) {
+                if host.isRunning {
+                    Button(action: { showQR = true }) {
+                        Label("QR Code", systemImage: "qrcode")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                }
+                
                 Button(action: { showSettings = true }) {
                     Label("Settings", systemImage: "gearshape")
                         .frame(maxWidth: .infinity)

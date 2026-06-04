@@ -17,6 +17,7 @@ let package = Package(
                 "remotyyMenuBarApp.swift",
                 "MenuBarView.swift",
                 "SettingsView.swift",
+                "QRHostView.swift",
             ],
             swiftSettings: [
                 .unsafeFlags(["-O"])

@@ -15,6 +15,10 @@ export class SignalingClient {
     this.url = url;
   }
 
+  getUrl(): string {
+    return this.url;
+  }
+
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {

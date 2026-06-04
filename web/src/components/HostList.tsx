@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useSignaling } from '../hooks/useSignaling';
 import type { HostInfo, Message } from '../lib/protocol';
+import QRCode from './QRCode';
 
 interface Props {
   onSelect: (host: HostInfo) => void;
@@ -10,36 +11,28 @@ export default function HostList({ onSelect }: Props) {
   const { client, status, connect } = useSignaling();
   const [hosts, setHosts] = useState<HostInfo[]>([]);
   const [error, setError] = useState('');
+  const [qrHost, setQrHost] = useState<HostInfo | null>(null);
 
   useEffect(() => {
     if (!client) return;
 
     client.on('host_list', (msg: Message) => {
       const payload = msg.payload as { hosts: HostInfo[] };
-      if (payload?.hosts) {
-        setHosts(payload.hosts);
-      }
+      if (payload?.hosts) setHosts(payload.hosts);
     });
-
     client.on('error', (msg: Message) => {
       const payload = msg.payload as { message?: string };
-      setError(payload?.message || 'Unknown error');
+      setError(payload?.message || 'Error');
     });
 
-    // Connect and request hosts
     connect().then(() => {
       client.send({ type: 'list_hosts' });
-    }).catch(err => {
-      setError(err.message || 'Failed to connect');
-    });
+    }).catch(err => setError(err.message));
   }, [client, connect]);
 
   const handleConnect = (host: HostInfo) => {
     client?.send({ type: 'connect', payload: { host_id: host.id } });
-    // Wait for room_ready
-    client?.on('room_ready', () => {
-      onSelect(host);
-    });
+    client?.on('room_ready', () => onSelect(host));
   };
 
   return (
@@ -59,7 +52,7 @@ export default function HostList({ onSelect }: Props) {
           <div className="empty-state">
             <span className="empty-icon">⎈</span>
             <p>No hosts online</p>
-            <p className="hint">Start a host with: <code>remotyy host</code></p>
+            <p className="hint">Start a host: <code>remotyy host</code></p>
           </div>
         )}
 
@@ -68,6 +61,14 @@ export default function HostList({ onSelect }: Props) {
             <div className="host-card-header">
               <span className="host-status-dot" />
               <span className="host-name">{host.name}</span>
+              <span style={{ flex: 1 }} />
+              <button
+                className="btn-small"
+                onClick={(e) => { e.stopPropagation(); setQrHost(qrHost?.id === host.id ? null : host); }}
+                title="Show QR code"
+              >
+                qr
+              </button>
             </div>
             <div className="host-card-body">
               <div className="host-detail">
@@ -79,6 +80,21 @@ export default function HostList({ onSelect }: Props) {
                 <span className="detail-value">{host.features?.join(', ') || 'terminal'}</span>
               </div>
             </div>
+            {qrHost?.id === host.id && (
+              <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 8 }}>
+                <QRCode
+                  data={`remotyy://connect/${encodeURIComponent(JSON.stringify({
+                    signal: client?.getUrl() || '',
+                    host: host.id,
+                    name: host.name,
+                  }))}`}
+                  size={180}
+                />
+                <p style={{ textAlign: 'center', fontSize: 10, color: '#666', marginTop: 4 }}>
+                  Scan with remotyy app
+                </p>
+              </div>
+            )}
           </div>
         ))}
       </div>
