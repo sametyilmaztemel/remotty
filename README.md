@@ -109,6 +109,41 @@ go run ./cmd/remotyy ls --signal ws://localhost:9000
 go run ./cmd/remotyy connect <host-id> --signal ws://localhost:9000
 ```
 
+## Native Desktop Apps
+
+remotyy provides native apps for all major platforms:
+
+### macOS Menu Bar App (SwiftUI)
+- Runs the host daemon with a native menu bar icon
+- Start/stop host with one click
+- Real-time session monitoring
+- Launch at login support
+- Settings panel for configuration
+
+```bash
+make build-macos-app
+# Binary: remotyy-macOS/.build/release/remotyy-macOS
+```
+
+### iOS App (SwiftUI)
+- Connect to remotyy hosts from iPhone/iPad
+- Native terminal emulator
+- Host discovery via signaling server
+- Dark mode, native feel
+
+Open `ios/remotyy.xcodeproj` in Xcode and build.
+
+### Tauri Desktop (Cross-platform)
+- Wraps the web client as a native desktop app
+- System tray with menu
+- Native notifications
+- Works on macOS, Linux, Windows
+
+```bash
+make build-tauri
+# Binary: src-tauri/target/release/remotyy
+```
+
 ## Build
 
 ```bash

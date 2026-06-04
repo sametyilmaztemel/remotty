@@ -9,3 +9,14 @@
 web/node_modules/
 web/dist/
 web/.tmp/
+src-tauri/target/
+remotyy-macOS/.build/
+ios/remotyy/build/
+*.xcworkspace
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+xcuserdata/
+DerivedData/
+*.app

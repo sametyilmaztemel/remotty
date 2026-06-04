@@ -55,6 +55,24 @@ dev-host:
 	@echo "Starting remotyy-host (connects to localhost:9000)..."
 	go run ./cmd/remotyy-host --signal ws://localhost:9000 --name "dev-host"
 
+# ─── Native Apps ──────────────────────────────────────────
+build-tauri:
+	@echo "Building Tauri desktop app..."
+	cd src-tauri && cargo build --release
+
+build-macos-app:
+	@echo "Building macOS menu bar app..."
+	cd remotyy-macOS && swift build -c release
+
+build-ios-app:
+	@echo "Building iOS app..."
+	cd ios && xcodebuild -project remotyy.xcodeproj \
+		-scheme remotyy -configuration Release \
+		-derivedDataPath build \
+		CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO 2>/dev/null || echo "⚠️  Xcode build skipped"
+
+build-native: build-tauri build-macos-app
+
 # ─── Quality ───────────────────────────────────────────────
 test:
 	go test ./... -v -race -count=1
