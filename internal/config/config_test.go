@@ -221,3 +221,91 @@ func TestVersionDefaults(t *testing.T) {
 		t.Error("Version should default to 'dev'")
 	}
 }
+
+func TestValidateValidConfig(t *testing.T) {
+	cfg := Config{
+		Signal:  SignalConfig{Port: 9000, DevMode: true},
+		Host:    HostConfig{ReconnectWait: 5 * time.Second, HeartbeatInt: 15 * time.Second, SessionTimeout: 30 * time.Minute, MaxSessions: 10},
+		WebRTC:  WebRTCConfig{ICETimeout: 10, MaxMessageSize: 65536},
+		Screen:  ScreenConfig{FPS: 15, Quality: 60, MaxDimension: 1920},
+		Logging: LoggingConfig{Level: "info"},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("valid config should pass: %v", err)
+	}
+}
+
+func TestValidateInvalidPort(t *testing.T) {
+	cfg := Config{
+		Signal:  SignalConfig{Port: 99999},
+		Logging: LoggingConfig{Level: "info"},
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Error("invalid port should fail validation")
+	}
+}
+
+func TestValidateTLSMissingCert(t *testing.T) {
+	cfg := Config{
+		Signal:  SignalConfig{Port: 9000, TLS: TLSConfig{Enabled: true}},
+		Logging: LoggingConfig{Level: "info"},
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Error("TLS without cert should fail validation")
+	}
+}
+
+func TestValidateInvalidLogLevel(t *testing.T) {
+	cfg := Config{
+		Signal:  SignalConfig{Port: 9000},
+		Logging: LoggingConfig{Level: "verbose"},
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Error("invalid log level should fail validation")
+	}
+}
+
+func TestValidateScreenOutOfRange(t *testing.T) {
+	cfg := Config{
+		Signal:  SignalConfig{Port: 9000},
+		Screen:  ScreenConfig{FPS: 200, Quality: 60, MaxDimension: 1920},
+		Logging: LoggingConfig{Level: "info"},
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Error("FPS > 120 should fail validation")
+	}
+}
+
+func TestValidateRequireAuthWithoutPassword(t *testing.T) {
+	cfg := Config{
+		Signal:  SignalConfig{Port: 9000},
+		Host:    HostConfig{RequireAuth: true},
+		Logging: LoggingConfig{Level: "info"},
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Error("require_auth without password should fail validation")
+	}
+}
+
+func TestValidateRequireAuthWithPassword(t *testing.T) {
+	cfg := Config{
+		Signal:  SignalConfig{Port: 9000},
+		Host:    HostConfig{RequireAuth: true, MasterHash: "$2a$10$somehash"},
+		Logging: LoggingConfig{Level: "info"},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("require_auth with hash should pass: %v", err)
+	}
+}
+
+func TestValidateNegativeValues(t *testing.T) {
+	cfg := Config{
+		Signal:  SignalConfig{Port: 9000},
+		Host:    HostConfig{ReconnectWait: -1 * time.Second},
+		WebRTC:  WebRTCConfig{ICETimeout: -5},
+		Logging: LoggingConfig{Level: "info"},
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Error("negative values should fail validation")
+	}
+}

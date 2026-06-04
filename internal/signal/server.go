@@ -584,9 +584,26 @@ func (s *Server) sendMessage(peer *Peer, msg protocol.Message) {
 	}
 }
 
-func (s *Server) sendError(peer *Peer, code, message string) {
+func (s *Server) sendError(peer *Peer, code string, message string) {
+	var errCode int
+	switch code {
+	case "unauthorized":
+		errCode = protocol.ErrUnauthorized
+	case "invalid_state":
+		errCode = protocol.ErrInvalidState
+	case "invalid_payload", "invalid_message":
+		errCode = protocol.ErrInvalidPayload
+	case "payload_too_large":
+		errCode = protocol.ErrPayloadTooLarge
+	case "host_not_found":
+		errCode = protocol.ErrHostNotFound
+	case "no_room":
+		errCode = protocol.ErrRoomNotFound
+	default:
+		errCode = protocol.ErrInternal
+	}
 	s.sendMessage(peer, protocol.NewMessage(protocol.MsgError, protocol.ErrorPayload{
-		Code:    0,
+		Code:    errCode,
 		Message: fmt.Sprintf("%s: %s", code, message),
 	}))
 }

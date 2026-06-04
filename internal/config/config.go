@@ -228,11 +228,72 @@ func defaultDataDir() string {
 
 // Validate checks the config for common issues.
 func (c *Config) Validate() error {
-	if c.Signal.AuthToken == "" && !c.Signal.DevMode {
-		// Not a hard error, but warn
+	var errs []string
+
+	// Signal server
+	if c.Signal.Port < 0 || c.Signal.Port > 65535 {
+		errs = append(errs, "signal.port must be 0-65535")
 	}
-	if c.Host.MasterPassword == "" && c.Host.MasterHash == "" {
-		// No master password — warn
+	if c.Signal.TLS.Enabled {
+		if c.Signal.TLS.CertFile == "" {
+			errs = append(errs, "signal.tls.cert_file is required when TLS enabled")
+		}
+		if c.Signal.TLS.KeyFile == "" {
+			errs = append(errs, "signal.tls.key_file is required when TLS enabled")
+		}
+	}
+
+	// Host daemon
+	if c.Host.ReconnectWait < 0 {
+		errs = append(errs, "host.reconnect_wait must be >= 0")
+	}
+	if c.Host.HeartbeatInt < 0 {
+		errs = append(errs, "host.heartbeat_interval must be >= 0")
+	}
+	if c.Host.SessionTimeout < 0 {
+		errs = append(errs, "host.session_timeout must be >= 0")
+	}
+	if c.Host.MaxSessions < 0 {
+		errs = append(errs, "host.max_sessions must be >= 0")
+	}
+
+	// WebRTC
+	if c.WebRTC.ICETimeout < 0 {
+		errs = append(errs, "webrtc.ice_timeout must be >= 0")
+	}
+	if c.WebRTC.MaxMessageSize < 0 {
+		errs = append(errs, "webrtc.max_message_size must be >= 0")
+	}
+
+	// Screen
+	if c.Screen.FPS < 0 || c.Screen.FPS > 120 {
+		errs = append(errs, "screen.fps must be 0-120")
+	}
+	if c.Screen.Quality < 0 || c.Screen.Quality > 100 {
+		errs = append(errs, "screen.quality must be 0-100")
+	}
+	if c.Screen.MaxDimension < 0 {
+		errs = append(errs, "screen.max_dimension must be >= 0")
+	}
+
+	// Logging
+	switch strings.ToLower(c.Logging.Level) {
+	case "debug", "info", "warn", "error", "trace", "fatal", "disabled", "":
+		// valid
+	default:
+		errs = append(errs, fmt.Sprintf("logging.level invalid: %q", c.Logging.Level))
+	}
+
+	// Security warnings (not errors, just logged)
+	if c.Signal.AuthToken == "" && !c.Signal.DevMode {
+		// Will be logged by caller
+	}
+	if c.Host.MasterPassword == "" && c.Host.MasterHash == "" && c.Host.RequireAuth {
+		errs = append(errs, "host.require_auth is true but no master_password/master_hash set")
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("config validation failed:\n  - %s", strings.Join(errs, "\n  - "))
 	}
 	return nil
 }

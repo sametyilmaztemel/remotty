@@ -160,12 +160,6 @@ type FileProgressPayload struct {
 	Speed      int64  `json:"speed"` // bytes/sec
 }
 
-// ErrorPayload carries error details.
-type ErrorPayload struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-}
-
 // ScreenConfigPayload configures screen sharing.
 type ScreenConfigPayload struct {
 	FPS           int  `json:"fps"`

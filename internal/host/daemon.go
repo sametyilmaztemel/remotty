@@ -96,18 +96,35 @@ func NewDaemon(cfg config.HostConfig, log zerolog.Logger) (*Daemon, error) {
 func (d *Daemon) Run(ctx context.Context) error {
 	defer d.cleanup()
 
+	backoff := d.cfg.ReconnectWait
+	maxBackoff := 60 * time.Second
+	if maxBackoff < backoff {
+		maxBackoff = backoff
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		default:
 			if err := d.connect(ctx); err != nil {
-				d.log.Error().Err(err).Msg("Connection failed, reconnecting...")
+				d.log.Error().
+					Err(err).
+					Dur("retry_after", backoff).
+					Msg("Connection failed, reconnecting...")
 				select {
 				case <-ctx.Done():
 					return nil
-				case <-time.After(d.cfg.ReconnectWait):
+				case <-time.After(backoff):
+					// Exponential backoff with max cap
+					backoff = backoff * 2
+					if backoff > maxBackoff {
+						backoff = maxBackoff
+					}
 				}
+			} else {
+				// Reset backoff on successful connection
+				backoff = d.cfg.ReconnectWait
 			}
 		}
 	}
