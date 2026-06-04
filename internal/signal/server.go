@@ -24,9 +24,10 @@ import (
 )
 
 const (
-	maxHostNameLen   = 64
-	maxPayloadSize   = 1 << 20 // 1MB max incoming message
-	maxFeaturesCount = 20
+	maxHostNameLen      = 64
+	maxPayloadSize      = 1 << 20 // 1MB max incoming message
+	maxFeaturesCount    = 20
+	peerReadDeadline    = 45 * time.Second // 3x heartbeat interval (15s)
 )
 
 var upgrader = websocket.Upgrader{
@@ -81,6 +82,7 @@ type Server struct {
 	peerCount  atomic.Int64
 	roomCount  atomic.Int64
 	accepting  atomic.Bool
+	rateLimit  *RateLimiter
 	log        *logging.Logger
 	done       chan struct{}
 }
@@ -96,6 +98,12 @@ func NewServer(cfg config.SignalConfig, log *logging.Logger) *Server {
 		done:      make(chan struct{}),
 	}
 	s.accepting.Store(true)
+
+	// Initialize rate limiter if configured
+	if cfg.RateLimit > 0 {
+		s.rateLimit = NewRateLimiter(cfg.RateLimit)
+	}
+
 	return s
 }
 
@@ -123,7 +131,7 @@ func (s *Server) Start(ctx context.Context) error {
 	addr := s.cfg.Addr()
 	s.httpServer = &http.Server{
 		Addr:         addr,
-		Handler:      withMiddleware(mux, s.cfg.DevMode),
+		Handler:      withMiddleware(mux, s.cfg.DevMode, s.rateLimit, s.cfg.AllowedOrigins),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -177,6 +185,23 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Auth token validation (if configured)
+	if s.cfg.AuthToken != "" {
+		token := r.URL.Query().Get("token")
+		if token == "" {
+			// Also check Authorization header
+			auth := r.Header.Get("Authorization")
+			if strings.HasPrefix(auth, "Bearer ") {
+				token = strings.TrimPrefix(auth, "Bearer ")
+			}
+		}
+		if token != s.cfg.AuthToken {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			log.Warn().Str("remote", r.RemoteAddr).Msg("WebSocket auth rejected")
+			return
+		}
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Warn().Err(err).Msg("WebSocket upgrade failed")
@@ -207,14 +232,22 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 // readLoop processes incoming WebSocket messages.
 func (s *Server) readLoop(peer *Peer) {
+	// Set initial read deadline
+	peer.Conn.SetReadDeadline(time.Now().Add(peerReadDeadline))
+
 	for {
 		_, data, err := peer.Conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				peer.log.Warn().Msg("Peer heartbeat timeout, closing connection")
+			} else if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
 				peer.log.Debug().Err(err).Msg("WebSocket read error")
 			}
 			return
 		}
+
+		// Reset deadline on any successful read
+		peer.Conn.SetReadDeadline(time.Now().Add(peerReadDeadline))
 
 		if len(data) > maxPayloadSize {
 			peer.log.Warn().Int("size", len(data)).Msg("Message too large, dropping")
@@ -565,20 +598,40 @@ func (s *Server) HTTPHandler() http.Handler {
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/api/hosts", s.handleListHostsAPI)
 	mux.HandleFunc("/api/stats", s.handleStats)
-	return withMiddleware(mux, s.cfg.DevMode)
+	return withMiddleware(mux, s.cfg.DevMode, s.rateLimit, s.cfg.AllowedOrigins)
 }
 
 // withMiddleware adds CORS, rate limiting, and logging middleware.
-func withMiddleware(next http.Handler, dev bool) http.Handler {
+func withMiddleware(next http.Handler, dev bool, rl *RateLimiter, allowedOrigins []string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// CORS
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		// CORS origin check
+		origin := r.Header.Get("Origin")
+		if origin != "" && !isOriginAllowed(origin, allowedOrigins, dev) {
+			http.Error(w, "Forbidden: origin not allowed", http.StatusForbidden)
+			return
+		}
+
+		// CORS headers
+		if len(allowedOrigins) > 0 {
+			w.Header().Set("Access-Control-Allow-Origin", allowedOrigins[0])
+		} else if dev {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
 			return
+		}
+
+		// Rate limiting
+		if rl != nil {
+			ip := extractIP(r.RemoteAddr)
+			if !rl.Allow(ip) {
+				http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
+				return
+			}
 		}
 
 		// Logging
@@ -591,4 +644,17 @@ func withMiddleware(next http.Handler, dev bool) http.Handler {
 			Dur("dur", time.Since(start)).
 			Msg("HTTP request")
 	})
+}
+
+// isOriginAllowed checks if the request origin is in the allowed list.
+func isOriginAllowed(origin string, allowed []string, dev bool) bool {
+	if dev && len(allowed) == 0 {
+		return true // DevMode without explicit origins = allow all
+	}
+	for _, a := range allowed {
+		if a == "*" || a == origin {
+			return true
+		}
+	}
+	return false
 }

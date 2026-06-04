@@ -17,13 +17,21 @@ import (
 
 func newTestServer(t *testing.T) (*Server, *httptest.Server) {
 	t.Helper()
+	return newTestServerWithConfig(t, config.SignalConfig{DevMode: true})
+}
+
+func newTestServerWithConfig(t *testing.T, cfg config.SignalConfig) (*Server, *httptest.Server) {
+	t.Helper()
 	log, err := logging.Init(zerolog.Disabled, "console", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := NewServer(config.SignalConfig{DevMode: true}, log)
+	s := NewServer(cfg, log)
 	ts := httptest.NewServer(s.HTTPHandler())
-	t.Cleanup(ts.Close)
+	t.Cleanup(func() {
+		ts.Close()
+		s.Shutdown()
+	})
 	return s, ts
 }
 
@@ -316,6 +324,113 @@ func TestMultipleHosts(t *testing.T) {
 func toRaw(v interface{}) json.RawMessage {
 	data, _ := json.Marshal(v)
 	return data
+}
+
+// ======== Auth Token Tests ========
+
+func TestAuthTokenRequired(t *testing.T) {
+	_, ts := newTestServerWithConfig(t, config.SignalConfig{
+		DevMode:   true,
+		AuthToken: "secret-token-123",
+	})
+
+	// Connection without token should fail
+	_, resp, err := (&websocket.Dialer{}).Dial(wsURL(ts), nil)
+	if err == nil {
+		t.Fatal("expected auth rejection, but connection succeeded")
+	}
+	if resp != nil && resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", resp.StatusCode)
+	}
+}
+
+func TestAuthTokenInvalid(t *testing.T) {
+	_, ts := newTestServerWithConfig(t, config.SignalConfig{
+		DevMode:   true,
+		AuthToken: "secret-token-123",
+	})
+
+	// Connection with wrong token via query param
+	u := wsURL(ts) + "?token=wrong-token"
+	_, resp, err := (&websocket.Dialer{}).Dial(u, nil)
+	if err == nil {
+		t.Fatal("expected auth rejection for wrong token")
+	}
+	if resp != nil && resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", resp.StatusCode)
+	}
+}
+
+func TestAuthTokenValidViaQuery(t *testing.T) {
+	_, ts := newTestServerWithConfig(t, config.SignalConfig{
+		DevMode:   true,
+		AuthToken: "secret-token-123",
+	})
+
+	u := wsURL(ts) + "?token=secret-token-123"
+	conn := dialWS(t, u)
+	defer conn.Close()
+
+	// Should be able to register
+	reg := protocol.NewMessage(protocol.MsgRegister, protocol.RegisterPayload{
+		Name:     "auth-test-host",
+		Platform: "linux",
+	})
+	conn.WriteJSON(reg)
+
+	var resp protocol.Message
+	conn.ReadJSON(&resp)
+	if resp.Type != protocol.MsgRegister {
+		t.Errorf("expected register response, got %s", resp.Type)
+	}
+}
+
+func TestAuthTokenValidViaBearer(t *testing.T) {
+	_, ts := newTestServerWithConfig(t, config.SignalConfig{
+		DevMode:   true,
+		AuthToken: "secret-token-123",
+	})
+
+	u := wsURL(ts)
+	conn, _, err := (&websocket.Dialer{}).Dial(u, http.Header{
+		"Authorization": []string{"Bearer secret-token-123"},
+	})
+	if err != nil {
+		t.Fatalf("dial with bearer token: %v", err)
+	}
+	defer conn.Close()
+
+	// Should work
+	reg := protocol.NewMessage(protocol.MsgRegister, protocol.RegisterPayload{
+		Name:     "bearer-host",
+		Platform: "linux",
+	})
+	conn.WriteJSON(reg)
+
+	var resp protocol.Message
+	conn.ReadJSON(&resp)
+	if resp.Type != protocol.MsgRegister {
+		t.Errorf("expected register response, got %s", resp.Type)
+	}
+}
+
+func TestAuthTokenDisabled(t *testing.T) {
+	// No auth token = open access
+	_, ts := newTestServer(t)
+	conn := dialWS(t, wsURL(ts))
+	defer conn.Close()
+
+	reg := protocol.NewMessage(protocol.MsgRegister, protocol.RegisterPayload{
+		Name:     "open-host",
+		Platform: "linux",
+	})
+	conn.WriteJSON(reg)
+
+	var resp protocol.Message
+	conn.ReadJSON(&resp)
+	if resp.Type != protocol.MsgRegister {
+		t.Errorf("expected register response, got %s", resp.Type)
+	}
 }
 
 func TestRegisterEmptyName(t *testing.T) {

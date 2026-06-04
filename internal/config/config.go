@@ -45,13 +45,14 @@ type GlobalConfig struct {
 
 // SignalConfig for the signaling server.
 type SignalConfig struct {
-	Host      string        `mapstructure:"host"`
-	Port      int           `mapstructure:"port"`
-	TLS       TLSConfig     `mapstructure:"tls"`
-	AuthToken string        `mapstructure:"auth_token"`
-	RateLimit int           `mapstructure:"rate_limit"`
-	DevMode   bool          `mapstructure:"dev_mode"`
-	WebDir    string        `mapstructure:"web_dir"`
+	Host            string        `mapstructure:"host"`
+	Port            int           `mapstructure:"port"`
+	TLS             TLSConfig     `mapstructure:"tls"`
+	AuthToken       string        `mapstructure:"auth_token"`
+	RateLimit       int           `mapstructure:"rate_limit"`
+	AllowedOrigins  []string      `mapstructure:"allowed_origins"`
+	DevMode         bool          `mapstructure:"dev_mode"`
+	WebDir          string        `mapstructure:"web_dir"`
 }
 
 // TLSConfig for encrypted connections.
@@ -73,6 +74,7 @@ type HostConfig struct {
 	HeartbeatInt   time.Duration `mapstructure:"heartbeat_interval"`
 	SessionTimeout time.Duration `mapstructure:"session_timeout"`
 	MaxSessions    int           `mapstructure:"max_sessions"`
+	RequireAuth    bool          `mapstructure:"require_auth"`
 	DeviceID       string        `mapstructure:"device_id"`
 	ShowQR         bool          `mapstructure:"show_qr"`
 	OnRegistered   func(peerID string)

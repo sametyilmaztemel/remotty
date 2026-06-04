@@ -59,6 +59,14 @@ func NewDaemon(cfg config.HostConfig, log zerolog.Logger) (*Daemon, error) {
 		cfg.MasterHash = hash
 	}
 
+	// Security check: warn if no auth is configured
+	if cfg.MasterHash == "" && cfg.MasterPassword == "" {
+		log.Warn().Msg("No master password configured — anyone can connect!")
+	}
+	if cfg.RequireAuth && cfg.MasterHash == "" && cfg.MasterPassword == "" {
+		return nil, fmt.Errorf("require_auth is enabled but no master_password or master_hash is set")
+	}
+
 	if cfg.Name == "" {
 		cfg.Name, _ = os.Hostname()
 	}
@@ -221,6 +229,19 @@ func (d *Daemon) handleConnectRequest(msg protocol.Message) {
 
 	d.log.Info().Str("client", payload.ClientID).Str("room", payload.Room).
 		Msg("Incoming client connection")
+
+	// Check max sessions
+	d.mu.RLock()
+	activeSessions := len(d.sessions)
+	d.mu.RUnlock()
+	if d.cfg.MaxSessions > 0 && activeSessions >= d.cfg.MaxSessions {
+		d.log.Warn().
+			Int("active", activeSessions).
+			Int("max", d.cfg.MaxSessions).
+			Msg("Max sessions reached, rejecting connection")
+		d.sendError(payload.Room, 4001, fmt.Sprintf("Max sessions (%d) reached", d.cfg.MaxSessions))
+		return
+	}
 
 	// Check allow list
 	if len(d.cfg.AllowList) > 0 {
@@ -579,6 +600,16 @@ func (d *Daemon) getSession(roomID string) *Session {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return d.sessions[roomID]
+}
+
+// sendError sends an error message back to the signal server.
+func (d *Daemon) sendError(roomID string, code int, message string) {
+	if d.signalConn != nil {
+		d.signalConn.WriteJSON(protocol.NewMessage(protocol.MsgError, protocol.ErrorPayload{
+			Code:    code,
+			Message: message,
+		}))
+	}
 }
 
 func (d *Daemon) cleanup() {
