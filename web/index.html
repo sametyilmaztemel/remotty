@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>remotyy — remote terminal</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/xterm@5.3.0/css/xterm.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Connection Screen -->
+    <div id="connect-screen" class="screen">
+      <div class="logo">
+        <span class="logo-icon">⎈</span>
+        <h1>remotyy</h1>
+        <p class="tagline">remote terminal · open source</p>
+      </div>
+
+      <div class="connect-form">
+        <div class="field">
+          <label>Signaling Server</label>
+          <input id="signal-url" type="text" value="ws://localhost:9000" placeholder="ws://host:port">
+        </div>
+        <div class="field">
+          <label>Master Password <span class="optional">(optional)</span></label>
+          <input id="master-password" type="password" placeholder="Leave blank if not set">
+        </div>
+        <button id="connect-btn" onclick="connect()">🔗 Connect</button>
+      </div>
+
+      <div id="host-list" class="host-list hidden">
+        <h3>Available Hosts</h3>
+        <div id="hosts-container"></div>
+      </div>
+
+      <div id="connection-status" class="status hidden"></div>
+    </div>
+
+    <!-- Terminal Screen -->
+    <div id="terminal-screen" class="screen hidden">
+      <div class="term-header">
+        <span id="term-title">remotyy — connecting...</span>
+        <div class="term-controls">
+          <button onclick="disconnect()" title="Disconnect">⏹ Disconnect</button>
+          <button onclick="toggleFullscreen()" title="Fullscreen">⛶</button>
+        </div>
+      </div>
+      <div id="terminal-container"></div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/xterm@5.3.0/lib/xterm.js"></script>
+  <script src="https://unpkg.com/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

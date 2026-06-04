@@ -1,0 +1,192 @@
+:root {
+  --bg: #0a0a0a;
+  --surface: #111111;
+  --border: #2a2a2a;
+  --text: #a3a3a3;
+  --text-bright: #e0e0e0;
+  --accent: #8b5cf6;
+  --accent-hover: #a78bfa;
+  --danger: #ef4444;
+  --success: #22c55e;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  height: 100vh;
+  overflow: hidden;
+}
+
+#app { height: 100vh; display: flex; }
+
+/* ─── Screens ──────────────────────────────────── */
+.screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 2rem;
+}
+.screen.hidden { display: none !important; }
+
+/* ─── Logo ─────────────────────────────────────── */
+.logo { text-align: center; margin-bottom: 2rem; }
+.logo-icon {
+  font-size: 3rem;
+  display: block;
+  margin-bottom: 0.5rem;
+  filter: grayscale(1) brightness(1.5);
+}
+.logo h1 {
+  font-family: var(--font-mono);
+  font-size: 2rem;
+  color: var(--text-bright);
+  letter-spacing: -0.02em;
+  text-transform: lowercase;
+}
+.tagline {
+  font-size: 0.85rem;
+  color: #666;
+  margin-top: 0.25rem;
+  font-family: var(--font-mono);
+}
+
+/* ─── Connection Form ─────────────────────────── */
+.connect-form {
+  width: 100%;
+  max-width: 400px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+.field { margin-bottom: 1rem; }
+.field label {
+  display: block;
+  font-size: 0.8rem;
+  color: #888;
+  margin-bottom: 0.4rem;
+  font-family: var(--font-mono);
+}
+.field label .optional { color: #555; font-size: 0.75rem; }
+.field input {
+  width: 100%;
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.6rem 0.8rem;
+  color: var(--text-bright);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.field input:focus { border-color: var(--accent); }
+
+button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 0.7rem 1.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  width: 100%;
+}
+button:hover { background: var(--accent-hover); }
+
+/* ─── Host List ────────────────────────────────── */
+.host-list {
+  width: 100%;
+  max-width: 500px;
+  margin-top: 1.5rem;
+}
+.host-list h3 {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+  color: #888;
+}
+.host-list.hidden { display: none; }
+
+.host-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: border-color 0.15s;
+}
+.host-item:hover { border-color: var(--accent); }
+.host-name { font-family: var(--font-mono); color: var(--text-bright); }
+.host-meta { font-size: 0.8rem; color: #666; }
+.host-status {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  margin-right: 0.5rem;
+}
+
+/* ─── Status ────────────────────────────────────── */
+.status {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+.status.hidden { display: none; }
+.status.error { background: rgba(239,68,68,0.1); color: var(--danger); border: 1px solid var(--danger); }
+.status.info { background: rgba(139,92,246,0.1); color: var(--accent); border: 1px solid var(--accent); }
+
+/* ─── Terminal Screen ──────────────────────────── */
+#terminal-screen { padding: 0; }
+.term-header {
+  width: 100%;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0.5rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+#term-title {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: #888;
+}
+.term-controls { display: flex; gap: 0.5rem; }
+.term-controls button {
+  width: auto;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.term-controls button:hover { border-color: var(--accent); color: var(--text-bright); }
+
+#terminal-container {
+  width: 100%;
+  flex: 1;
+  padding: 0.5rem;
+}
+#terminal-container .xterm {
+  height: 100%;
+  padding: 0.5rem;
+}

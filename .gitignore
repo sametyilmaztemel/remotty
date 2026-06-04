@@ -1,0 +1,8 @@
+# bin/
+# dist/
+# .env
+*.local
+*.test
+/remotyy
+/remotyy-host
+/remotyy-signal

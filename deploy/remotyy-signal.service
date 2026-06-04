@@ -1,0 +1,19 @@
+# remotyy-signal (signaling server)
+# requires: REMOTYY_AUTH_TOKEN (optional, recommended for production)
+
+[Unit]
+Description=remotyy Signaling Server
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/remotyy
+EnvironmentFile=/etc/remotyy/signal.env
+ExecStart=/home/ubuntu/remotyy/remotyy-signal --port ${REMOTYY_PORT:-9000}
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
