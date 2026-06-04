@@ -26,7 +26,7 @@ jobs:
         run: |
           GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 \
             go build -o dist/remotyy-${{ matrix.goos }}-${{ matrix.goarch }} \
-            -ldflags="-s -w -X github.com/remotyy/remotyy/internal/config.Version=${{ github.ref_name }}" \
+            -ldflags="-s -w -X github.com/sametyilmaztemel/remotyy/internal/config.Version=${{ github.ref_name }}" \
             ./cmd/remotyy
       
       - name: Package
@@ -52,7 +52,7 @@ jobs:
           cache-dependency-path: web/package-lock.json
       
       - run: cd web && npm ci && npm run build
-      - run: cd web && tar czf ../dist/remotyy-web.tar.gz dist/
+      - run: mkdir -p dist && cd web && tar czf ../dist/remotyy-web.tar.gz dist/
       
       - uses: actions/upload-artifact@v4
         with:
@@ -64,9 +64,13 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
       
       - name: Build remotyy binary (universal)
         run: |
+          mkdir -p dist
           GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build \
             -o dist/remotyy-darwin-arm64 \
             -ldflags="-s -w" ./cmd/remotyy
