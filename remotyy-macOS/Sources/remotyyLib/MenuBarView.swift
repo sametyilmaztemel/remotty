@@ -1,11 +1,11 @@
 import SwiftUI
 
-struct MenuBarView: View {
+public struct MenuBarView: View {
     @EnvironmentObject private var host: HostManager
     @State private var showSettings = false
     @State private var showQR = false
     
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             HeaderView(host: host)
             Divider()

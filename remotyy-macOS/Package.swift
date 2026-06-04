@@ -11,14 +11,33 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "remotyy",
-            path: ".",
-            exclude: ["Info.plist"],
+            dependencies: ["remotyyLib"],
+            path: "Sources/remotyy",
             sources: [
                 "remotyyMenuBarApp.swift",
+            ],
+            swiftSettings: [
+                .unsafeFlags(["-O"])
+            ]
+        ),
+        .target(
+            name: "remotyyLib",
+            path: "Sources/remotyyLib",
+            sources: [
+                "AppDelegate.swift",
+                "HostManager.swift",
                 "MenuBarView.swift",
                 "SettingsView.swift",
                 "QRHostView.swift",
             ],
+            swiftSettings: [
+                .unsafeFlags(["-O"])
+            ]
+        ),
+        .testTarget(
+            name: "remotyyTests",
+            dependencies: ["remotyyLib"],
+            path: "Tests",
             swiftSettings: [
                 .unsafeFlags(["-O"])
             ]

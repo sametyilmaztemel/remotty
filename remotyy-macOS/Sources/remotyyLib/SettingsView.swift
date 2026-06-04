@@ -1,9 +1,11 @@
 import SwiftUI
 
-struct SettingsView: View {
+public struct SettingsView: View {
     @EnvironmentObject private var host: HostManager
     
-    var body: some View {
+    public init() {}
+    
+    public var body: some View {
         TabView {
             Form {
                 Section {
@@ -51,7 +53,7 @@ struct SettingsView: View {
                     .font(.system(size: 40))
                     .foregroundColor(.accentColor)
                 Text("remotyy").font(.title2).fontDesign(.monospaced).fontWeight(.semibold)
-                Text("Version \(Bundle.main.object(forInfoDictionaryKey: \"CFBundleShortVersionString\") as? String ?? \"dev\")").font(.caption).foregroundColor(.secondary)
+                Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev")").font(.caption).foregroundColor(.secondary)
                 Text("Remote terminal & screen access via WebRTC")
                     .font(.caption).foregroundColor(.secondary).multilineTextAlignment(.center)
                     .frame(width: 220)
