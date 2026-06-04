@@ -1,6 +1,6 @@
-# bin/
-# dist/
-# .env
+bin/
+dist/
+web/dist/
 *.local
 *.test
 /remotyy

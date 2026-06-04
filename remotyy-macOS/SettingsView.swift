@@ -45,9 +45,9 @@ struct SettingsView: View {
                 localHostName = host.hostName
                 localPassword = host.masterPassword
             }
-            .onChange(of: localSignalURL) { host.signalURL = $0 }
-            .onChange(of: localHostName) { host.hostName = $0 }
-            .onChange(of: localPassword) { host.masterPassword = $0 }
+            .onChange(of: localSignalURL) { _, new in host.signalURL = new }
+            .onChange(of: localHostName) { _, new in host.hostName = new }
+            .onChange(of: localPassword) { _, new in host.masterPassword = new }
             
             // About
             VStack(spacing: 16) {
