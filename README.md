@@ -2,9 +2,11 @@
 
 > **Remote terminal & screen access via WebRTC**  
 > Cross-platform host daemon + web/CLI/native clients.  
-> Open-source alternative to Macky.
+> Open source, unlimited, free.
 
 remotyy gives you secure, encrypted remote access to any machine — your Mac, a Linux server, a Raspberry Pi, or a cloud VM — directly from your browser, terminal, or native app. No open ports, no VPN, no SSH key management.
+
+No session limits, no device limits, no time limits. Everything is free and open source.
 
 ```
                     ┌──────────────────┐
@@ -16,32 +18,30 @@ remotyy gives you secure, encrypted remote access to any machine — your Mac, a
                   ▼                   ▼
           ┌──────────────┐   ┌──────────────────┐
           │  Host Daemon  │   │  Client(s)        │
-          │  (target mac) │   │  Web / CLI / iOS  │
+          │  (any machine)│   │  Web / CLI / iOS  │
           │  pty → shell  │   │  macOS / TUI      │
           │  WebRTC P2P   │◄──┤  xterm.js/Term    │
           │  DTLS-SRTP    │   │  WebRTC DataChan  │
           └──────────────┘   └──────────────────┘
 ```
 
-## Features — All Free & Unlimited
-
-No session limits, no time limits, no device limits. Everything Macky charges $29 for is free and open source.
+## Features
 
 - **🔒 E2E Encrypted** — WebRTC DTLS-SRTP, end-to-end encrypted tunnel
 - **🌐 Cross-platform host** — macOS, Linux (ARM64/AMD64), Windows
 - **🖥 Web client** — Terminal in your browser via xterm.js
 - **📟 CLI client** — `remotyy connect` from any terminal
-- **📱 iOS app** — Native SwiftUI client (via Xcode)
-- **🖥 macOS app** — Menu bar host controller (via Xcode)
-- **🦀 Tauri desktop** — Cross-platform native wrapper (Rust)
-- **🗄️ Config management** — YAML + env vars + CLI flags
+- **📱 iOS app** — Native SwiftUI client
+- **🖥 macOS app** — Menu bar host controller
 - **🔑 Dual-layer auth** — Signaling token + Master Password (bcrypt)
 - **📋 Device allow list** — Explicitly approve devices
 - **🕶 Blind signaling** — Server coordinates handshake only
-- **📹 Screen sharing** — macOS + Linux (in progress)
-- **📁 File transfer** — Chunked with SHA256 checksums (in progress)
-- **📝 Session recording** — Full terminal capture & replay (in progress)
+- **📹 Screen sharing** — macOS + Linux
+- **📁 File transfer** — Chunked with SHA256 checksums
+- **📝 Session recording** — Full terminal capture & replay
 - **📊 REST API** — Health checks, host listing, metrics
+- **♾️ Unlimited** — No session/device/time limits
+- **🧾 MIT License** — Free forever
 
 ## Quick Start
 
@@ -59,8 +59,6 @@ go build ./cmd/remotyy
 
 ### 2. Host Daemon
 
-On the machine you want to access remotely:
-
 ```bash
 ./remotyy host --signal ws://your-server:9000 --name "my-machine"
 ```
@@ -70,6 +68,13 @@ With a master password (recommended):
 ```bash
 ./remotyy host --signal ws://your-server:9000 --name "my-machine" \
   --master-password "your-secret-password"
+```
+
+Or use QR pairing (zero-config):
+
+```bash
+./remotyy host --signal ws://your-server:9000 --qr
+# → Scan QR code with phone to connect instantly
 ```
 
 ### 3. Connect
@@ -89,70 +94,42 @@ cd web && npm install && npm run dev
 ./remotyy connect host-id --signal ws://your-server:9000
 ```
 
+## Build
+
+```bash
+make build                # CLI binary
+make build-all-platforms  # Cross-compile (Linux + macOS)
+make build-web            # Web client
+make build-macos-app      # macOS menu bar app (requires Xcode)
+make build-dmg            # macOS .dmg package
+```
+
 ## Architecture
 
 ```
 remotyy/
-├── cmd/remotyy/              # Main CLI (signal | host | connect)
-│   └── cmd/                  # Cobra subcommands
+├── cmd/remotyy/           # CLI (signal | host | connect)
 ├── internal/
-│   ├── auth/                 # bcrypt/argon2 password hashing
-│   ├── config/               # Viper config (YAML + env + flags)
-│   ├── host/                 # Host daemon, session management
-│   ├── client/               # Client library
-│   ├── signal/               # WebSocket signaling server
-│   ├── webrtc/               # pion/webrtc engine wrapper
-│   ├── pty/                  # PTY session manager
-│   ├── screen/               # Screen capture framework
-│   ├── transfer/             # File transfer protocol
-│   ├── mux/                  # Connection multiplexer
-│   ├── protocol/             # Wire protocol definitions
-│   └── logging/              # Structured logging + audit
-├── web/                      # React + TypeScript web client
-│   └── src/
-│       ├── components/       # Terminal, Screen, FileTransfer UI
-│       ├── hooks/            # useSignaling, useWebRTC
-│       └── lib/              # Protocol, WebRTC, Signaling clients
-├── ios/remotyy/              # Native iOS app (SwiftUI)
-├── remotyy-macOS/            # Native macOS menu bar app (SwiftUI)
-├── src-tauri/                # Tauri desktop wrapper (Rust)
-├── tui/                      # Bubble Tea TUI client (Go)
-├── deploy/                   # Docker, systemd, launchd configs
-├── docs/                     # Documentation
-├── .github/workflows/        # CI/CD
-├── Makefile
-└── remotyy.example.yaml
+│   ├── auth/              # bcrypt/argon2 password hashing
+│   ├── config/            # Viper config
+│   ├── host/              # Host daemon
+│   ├── client/            # Client library
+│   ├── signal/            # WebSocket signaling server
+│   ├── webrtc/            # pion/webrtc engine
+│   ├── pty/               # PTY session manager
+│   ├── screen/            # Screen capture
+│   ├── transfer/          # File transfer
+│   ├── qr/                # QR pairing
+│   ├── protocol/          # Wire protocol
+│   └── logging/           # Audit logging
+├── web/                   # React + TypeScript client
+├── ios/                   # iOS SwiftUI app
+├── remotyy-macOS/          # macOS menu bar app
+├── src-tauri/             # Tauri desktop wrapper
+├── tui/                   # Bubble Tea TUI client
+├── deploy/                # Docker, systemd, launchd
+└── docs/                  # Documentation
 ```
-
-## Build
-
-```bash
-# Go binaries (cross-platform)
-make build-all                                    # Current platform
-make build-linux-arm64                            # ARM64 Linux
-make build-linux-amd64                            # AMD64 Linux
-make build-darwin-arm64                           # Apple Silicon
-
-# Web client
-cd web && npm install && npm run build
-
-# Tauri desktop app
-make build-tauri                                  # Requires Rust
-
-# macOS menu bar app
-make build-macos-app                              # Requires Xcode
-
-# iOS app (open in Xcode)
-open ios/remotyy/
-```
-
-## Deployment Options
-
-- **Single machine:** Run signaling + host + web all on one machine
-- **VPS/Cloud:** Signaling on a public server, hosts connect from anywhere
-- **Local network:** No signaling server needed with Bonjour discovery
-- **Docker:** `docker compose up` for signaling + web
-- **systemd:** Production service files for Linux servers
 
 ## Security
 
@@ -165,30 +142,17 @@ open ios/remotyy/
 | Data path | Blind signaling — server only coordinates handshake |
 | NAT traversal | STUN/ICE — no open ports required |
 
-## Comparison
+## Deployment
 
-| Feature | Macky ($29) | remotyy (free) |
-|---------|-------------|----------------|
-| Host platform | macOS only | macOS, Linux, Windows |
-| Client platform | iOS only | Web, CLI, iOS, macOS, TUI |
-| Session limit | 5 min (free) / Unlimited ($29) | **Unlimited — free** |
-| Device limit | 1 device (free) / Unlimited ($29) | **Unlimited — free** |
-| Signaling | Proprietary cloud | Self-hosted or cloud |
-| File transfer | ❌ | ✅ (in progress) |
-| Port forwarding | ❌ | ✅ (planned) |
-| Clipboard sync | ❌ | ✅ (planned) |
-| Session recording | ❌ | ✅ (in progress) |
-| Open source | ❌ | ✅ MIT |
-| Price | Free / $29 Pro | **Free forever** |
+- **Single machine:** Run all components on one machine
+- **VPS/Cloud:** Signaling on a public server, hosts connect from anywhere
+- **Local network:** Same-network with auto-discovery
+- **Docker:** `docker compose up`
+- **systemd:** Production service files included
 
 ## Contributing
 
-Contributions welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Open a pull request
+Contributions welcome! Read [CONTRIBUTING.md](CONTRIBUTING.md) first.
 
 ## License
 
@@ -196,4 +160,4 @@ MIT — see [LICENSE](LICENSE)
 
 ---
 
-Built with [pion/webrtc](https://github.com/pion/webrtc) (Go) + [xterm.js](https://xtermjs.org/) + [Tauri](https://tauri.app/)
+Built with [pion/webrtc](https://github.com/pion/webrtc) + [xterm.js](https://xtermjs.org/) + [Tauri](https://tauri.app/)
