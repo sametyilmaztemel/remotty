@@ -143,6 +143,11 @@ func (d *Daemon) connect(ctx context.Context) error {
 		json.Unmarshal(resp.Payload, &payload)
 		d.peerID, _ = payload["id"].(string)
 		d.log.Info().Str("peer_id", d.peerID).Msg("Registered with signaling server")
+
+		// Call OnRegistered callback if set
+		if d.cfg.OnRegistered != nil {
+			d.cfg.OnRegistered(d.peerID)
+		}
 	}
 
 	// Start heartbeat

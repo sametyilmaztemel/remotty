@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"os"
 	gosignal "os/signal"
 	"syscall"
@@ -9,6 +10,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/sametyilmaztemel/remotyy/internal/config"
 	"github.com/sametyilmaztemel/remotyy/internal/host"
+	"github.com/sametyilmaztemel/remotyy/internal/qr"
 	"github.com/spf13/cobra"
 )
 
@@ -32,6 +34,9 @@ Connects to signaling server and waits for client connections.`,
 		if v, _ := cmd.Flags().GetString("master-password"); v != "" {
 			cfg.MasterPassword = v
 		}
+		if v, _ := cmd.Flags().GetBool("qr"); v {
+			cfg.ShowQR = true
+		}
 
 		// Env overrides (lowest priority)
 		if env := os.Getenv("REMOTYY_SIGNAL_URL"); env != "" && cfg.SignalURL == "" {
@@ -45,6 +50,26 @@ Connects to signaling server and waits for client connections.`,
 		if err != nil {
 			log.Fatal().Err(err).Msg("Failed to create host daemon")
 			return err
+		}
+
+		if cfg.ShowQR {
+			cfg.OnRegistered = func(peerID string) {
+				qrArt, url, err := qr.Generate(qr.PairingURL{
+					Version:  1,
+					Signal:   cfg.SignalURL,
+					HostID:   peerID,
+					HostName: cfg.Name,
+				})
+				if err != nil {
+					log.Error().Err(err).Msg("Failed to generate QR code")
+					return
+				}
+				fmt.Println("\n" + qrArt)
+				fmt.Println("📱 Scan this QR code with your phone camera")
+				fmt.Println("   Or open this URL:")
+				fmt.Println("   " + url)
+				fmt.Println()
+			}
 		}
 
 		ctx, stop := gosignal.NotifyContext(context.Background(),
@@ -68,4 +93,5 @@ func init() {
 	hostCmd.Flags().StringP("signal", "s", "ws://localhost:9000", "Signaling server URL")
 	hostCmd.Flags().StringP("name", "n", "", "Host display name")
 	hostCmd.Flags().StringP("master-password", "m", "", "Master password")
+	hostCmd.Flags().Bool("qr", false, "Show QR code for zero-config phone pairing")
 }

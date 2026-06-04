@@ -23,7 +23,9 @@ remotyy gives you secure, encrypted remote access to any machine — your Mac, a
           └──────────────┘   └──────────────────┘
 ```
 
-## Features
+## Features — All Free & Unlimited
+
+No session limits, no time limits, no device limits. Everything Macky charges $29 for is free and open source.
 
 - **🔒 E2E Encrypted** — WebRTC DTLS-SRTP, end-to-end encrypted tunnel
 - **🌐 Cross-platform host** — macOS, Linux (ARM64/AMD64), Windows
@@ -169,13 +171,15 @@ open ios/remotyy/
 |---------|-------------|----------------|
 | Host platform | macOS only | macOS, Linux, Windows |
 | Client platform | iOS only | Web, CLI, iOS, macOS, TUI |
+| Session limit | 5 min (free) / Unlimited ($29) | **Unlimited — free** |
+| Device limit | 1 device (free) / Unlimited ($29) | **Unlimited — free** |
 | Signaling | Proprietary cloud | Self-hosted or cloud |
 | File transfer | ❌ | ✅ (in progress) |
 | Port forwarding | ❌ | ✅ (planned) |
 | Clipboard sync | ❌ | ✅ (planned) |
 | Session recording | ❌ | ✅ (in progress) |
 | Open source | ❌ | ✅ MIT |
-| Price | $29 lifetime | Free |
+| Price | Free / $29 Pro | **Free forever** |
 
 ## Contributing
 

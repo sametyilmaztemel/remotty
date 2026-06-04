@@ -73,6 +73,8 @@ type HostConfig struct {
 	SessionTimeout time.Duration `mapstructure:"session_timeout"`
 	MaxSessions    int           `mapstructure:"max_sessions"`
 	DeviceID       string        `mapstructure:"device_id"`
+	ShowQR         bool          `mapstructure:"show_qr"`
+	OnRegistered   func(peerID string)
 }
 
 // ClientConfig for the client.
@@ -120,7 +122,7 @@ func Load(configPath string) (*Config, error) {
 	v.SetDefault("host.reconnect_wait", DefaultReconnectWait)
 	v.SetDefault("host.heartbeat_interval", DefaultHeartbeatInt)
 	v.SetDefault("host.session_timeout", DefaultSessionTimeout)
-	v.SetDefault("host.max_sessions", DefaultMaxSessions)
+	v.SetDefault("host.max_sessions", 0) // 0 = unlimited
 	v.SetDefault("host.features", []string{"terminal"})
 	v.SetDefault("webrtc.ice_servers", []string{DefaultSTUNServer})
 	v.SetDefault("webrtc.mdns", true)
