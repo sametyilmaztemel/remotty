@@ -1,6 +1,5 @@
-#!/usr/bin/env xcworkspace
-// Swift Package Manager — Xcode project generation
 // swift-tools-version: 5.9
+// Swift Package Manager config
 
 import PackageDescription
 
