@@ -21,7 +21,6 @@ struct remotyyApp: App {
         Settings {
             SettingsView()
                 .environmentObject(host)
-                .frame(minWidth: 420, minHeight: 300)
         }
     }
 }

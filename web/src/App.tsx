@@ -5,9 +5,10 @@ import HostList from './components/HostList';
 import TerminalView from './components/TerminalView';
 import ScreenViewer from './components/ScreenViewer';
 import FileTransfer from './components/FileTransfer';
+import HelpView from './components/HelpView';
 import type { HostInfo } from './lib/protocol';
 
-type View = 'connect' | 'hosts' | 'terminal' | 'screen' | 'files';
+type View = 'connect' | 'hosts' | 'terminal' | 'screen' | 'files' | 'help';
 
 function App() {
   const [view, setView] = useState<View>('connect');
@@ -69,6 +70,13 @@ function App() {
             </button>
           </nav>
           <div className="sidebar-footer">
+            <button
+              className={`nav-item ${view === 'help' ? 'active' : ''}`}
+              onClick={() => setView('help')}
+              style={{ marginBottom: 8 }}
+            >
+              ❓ Help
+            </button>
             {selectedHost && (
               <div className="connected-info">
                 <span className="status-dot" />
@@ -96,6 +104,9 @@ function App() {
           )}
           {view === 'files' && selectedHost && (
             <FileTransfer host={selectedHost} signalUrl={signalUrl} />
+          )}
+          {view === 'help' && (
+            <HelpView />
           )}
         </main>
       </div>
