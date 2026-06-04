@@ -558,3 +558,181 @@ func TestRelayWithoutRoom(t *testing.T) {
 		t.Errorf("expected error for relay without room, got %s", resp.Type)
 	}
 }
+
+// ======== Room Lifecycle Tests ========
+
+func TestRoomLifecycle(t *testing.T) {
+	s, ts := newTestServer(t)
+
+	// Register host
+	hostConn := dialWS(t, wsURL(ts))
+	defer hostConn.Close()
+	hostConn.WriteJSON(protocol.NewMessage(protocol.MsgRegister, protocol.RegisterPayload{
+		Name: "lifecycle-host", Platform: "linux",
+	}))
+	var hostResp protocol.Message
+	hostConn.ReadJSON(&hostResp)
+	hostID := ""
+	json.Unmarshal(hostResp.Payload, &struct {
+		ID *string `json:"id"`
+	}{ID: &hostID})
+
+	// Connect client
+	clientConn := dialWS(t, wsURL(ts))
+	defer clientConn.Close()
+	clientConn.WriteJSON(protocol.NewMessage(protocol.MsgConnect, protocol.ConnectPayload{
+		HostID: hostID,
+	}))
+	var connectResp protocol.Message
+	clientConn.ReadJSON(&connectResp)
+	if connectResp.Type != protocol.MsgRoomReady {
+		t.Fatalf("expected room_ready, got %s", connectResp.Type)
+	}
+
+	// Host should receive connect notification
+	var hostNotify protocol.Message
+	hostConn.ReadJSON(&hostNotify)
+	if hostNotify.Type != protocol.MsgConnect {
+		t.Errorf("host should get connect notification, got %s", hostNotify.Type)
+	}
+
+	// Verify stats
+	s.mu.RLock()
+	rooms := len(s.rooms)
+	peers := len(s.peers)
+	s.mu.RUnlock()
+	if rooms != 1 {
+		t.Errorf("rooms = %d, want 1", rooms)
+	}
+	if peers != 2 {
+		t.Errorf("peers = %d, want 2", peers)
+	}
+}
+
+func TestPeerDisconnectRoomCleanup(t *testing.T) {
+	s, ts := newTestServer(t)
+
+	// Register host + connect client
+	hostConn := dialWS(t, wsURL(ts))
+	hostConn.WriteJSON(protocol.NewMessage(protocol.MsgRegister, protocol.RegisterPayload{
+		Name: "disconnect-host", Platform: "linux",
+	}))
+	var hostResp protocol.Message
+	hostConn.ReadJSON(&hostResp)
+	var regData struct {
+		ID string `json:"id"`
+	}
+	json.Unmarshal(hostResp.Payload, &regData)
+
+	clientConn := dialWS(t, wsURL(ts))
+	clientConn.WriteJSON(protocol.NewMessage(protocol.MsgConnect, protocol.ConnectPayload{
+		HostID: regData.ID,
+	}))
+	var connectResp protocol.Message
+	clientConn.ReadJSON(&connectResp) // room_ready
+
+	var hostNotify protocol.Message
+	hostConn.ReadJSON(&hostNotify) // connect notification
+
+	// Client disconnects
+	clientConn.Close()
+
+	// Host should receive peer_left notification
+	var leftMsg protocol.Message
+	hostConn.ReadJSON(&leftMsg)
+	if leftMsg.Type != protocol.MsgPeerLeft {
+		t.Errorf("expected peer_left, got %s", leftMsg.Type)
+	}
+
+	// Room should be cleaned up
+	s.mu.RLock()
+	rooms := len(s.rooms)
+	s.mu.RUnlock()
+	if rooms != 0 {
+		t.Errorf("rooms after disconnect = %d, want 0", rooms)
+	}
+}
+
+func TestConcurrentRegistration(t *testing.T) {
+	_, ts := newTestServer(t)
+
+	const numHosts = 10
+	results := make(chan error, numHosts)
+
+	for i := 0; i < numHosts; i++ {
+		go func(idx int) {
+			conn, _, err := (&websocket.Dialer{}).Dial(wsURL(ts), nil)
+			if err != nil {
+				results <- err
+				return
+			}
+			defer conn.Close()
+
+			conn.WriteJSON(protocol.NewMessage(protocol.MsgRegister, protocol.RegisterPayload{
+				Name: fmt.Sprintf("concurrent-host-%d", idx),
+				Platform: "linux",
+			}))
+
+			var resp protocol.Message
+			if err := conn.ReadJSON(&resp); err != nil {
+				results <- err
+				return
+			}
+			if resp.Type != protocol.MsgRegister {
+				results <- fmt.Errorf("host %d: expected register, got %s", idx, resp.Type)
+				return
+			}
+			results <- nil
+		}(i)
+	}
+
+	for i := 0; i < numHosts; i++ {
+		if err := <-results; err != nil {
+			t.Errorf("host %d failed: %v", i, err)
+		}
+	}
+}
+
+func TestConnectToOfflineHost(t *testing.T) {
+	_, ts := newTestServer(t)
+
+	clientConn := dialWS(t, wsURL(ts))
+	defer clientConn.Close()
+
+	clientConn.WriteJSON(protocol.NewMessage(protocol.MsgConnect, protocol.ConnectPayload{
+		HostID: "nonexistent-host-id",
+	}))
+
+	var resp protocol.Message
+	clientConn.ReadJSON(&resp)
+	if resp.Type != protocol.MsgError {
+		t.Errorf("expected error for offline host, got %s", resp.Type)
+	}
+}
+
+func TestDuplicateRegistration(t *testing.T) {
+	_, ts := newTestServer(t)
+
+	conn := dialWS(t, wsURL(ts))
+	defer conn.Close()
+
+	// First registration should succeed
+	conn.WriteJSON(protocol.NewMessage(protocol.MsgRegister, protocol.RegisterPayload{
+		Name: "dup-host", Platform: "linux",
+	}))
+	var resp1 protocol.Message
+	conn.ReadJSON(&resp1)
+	if resp1.Type != protocol.MsgRegister {
+		t.Errorf("first registration should succeed, got %s", resp1.Type)
+	}
+
+	// Second registration should fail
+	conn.WriteJSON(protocol.NewMessage(protocol.MsgRegister, protocol.RegisterPayload{
+		Name: "dup-host-2", Platform: "linux",
+	}))
+	var resp2 protocol.Message
+	conn.ReadJSON(&resp2)
+	if resp2.Type != protocol.MsgError {
+		t.Errorf("duplicate registration should error, got %s", resp2.Type)
+	}
+}
