@@ -5,6 +5,26 @@
 
 remotyy, Macky'nin açık kaynak alternatifidir. Mac'inizin veya Linux sunucunuzun terminaline herhangi bir tarayıcıdan veya CLI'dan, güvenli ve şifreli bir WebRTC bağlantısıyla erişmenizi sağlar.
 
+## Professional Features
+
+- **🔒 E2E Encrypted** — WebRTC DTLS-SRTP, end-to-end encrypted tunnel
+- **🌐 Cross-platform host** — macOS, Linux (ARM64, AMD64), any machine
+- **🖥 Web client** — Terminal in your browser via xterm.js (React)
+- **📟 CLI client** — Connect from terminal via `remotyy connect`
+- **🗄️ Config management** — YAML config file, env vars, CLI flags (viper)
+- **🔑 Dual-layer auth** — Signaling auth token + Master Password (bcrypt/argon2)
+- **📋 Device allow list** — Host explicitly approves devices
+- **🕶 Blind signaling** — Server coordinates handshake only, traffic never touches cloud
+- **🔄 Auto-reconnect** — Host reconnects to signaling server with backoff
+- **🚀 Self-hosted** — Run your own signaling server, zero third-party dependency
+- **📹 Screen sharing** — macOS (CGDisplay) + Linux (X11/PipeWire)
+- **📁 File transfer** — Chunked with SHA256 checksums, progress tracking, resume
+- **📝 Session recording** — Full terminal session capture and replay
+- **🔍 Audit logging** — Security event trail for all connections
+- **📊 REST API** — Health checks, host listing, stats
+- **🤖 Hermes integration** — Works with Hermes Agent on ARM (Oracle Cloud)
+- **♿ TUI client** — Bubble Tea terminal UI (coming soon)
+
 ## Features
 
 - **🔒 E2E Encrypted** — WebRTC DTLS-SRTP, end-to-end encrypted tunnel
