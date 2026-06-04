@@ -99,7 +99,7 @@ func TestEngineICEStateCallback(t *testing.T) {
 	if eng == nil {
 		t.Fatal("engine should not be nil")
 	}
-	_ = stateCalled
+	_ = stateCalled.Load()
 }
 
 func TestEngineConnectionState(t *testing.T) {
