@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/pion/interceptor"
@@ -13,13 +14,47 @@ import (
 	"github.com/sametyilmaztemel/remotty/internal/protocol"
 )
 
+// ReconnectConfig configures ICE restart reconnection behaviour.
+type ReconnectConfig struct {
+	// InitialBackoff is the initial delay before the first reconnection attempt.
+	InitialBackoff time.Duration
+
+	// MaxBackoff is the maximum delay between reconnection attempts.
+	MaxBackoff time.Duration
+
+	// MaxAttempts is the maximum number of reconnection attempts (0 = unlimited).
+	MaxAttempts int
+
+	// OnReconnectStart is called when a reconnection cycle begins.
+	OnReconnectStart func(attempt int)
+
+	// OnReconnectSuccess is called when reconnection succeeds.
+	OnReconnectSuccess func()
+
+	// OnReconnectFailed is called when all reconnection attempts are exhausted.
+	OnReconnectFailed func()
+}
+
+// DefaultReconnectConfig returns sensible defaults for ICE restart reconnection.
+func DefaultReconnectConfig() ReconnectConfig {
+	return ReconnectConfig{
+		InitialBackoff: 5 * time.Second,
+		MaxBackoff:     60 * time.Second,
+		MaxAttempts:    10,
+	}
+}
+
 // Engine manages a WebRTC peer connection with data channels.
 type Engine struct {
-	pc           *pion.PeerConnection
-	config       EngineConfig
-	mu           sync.Mutex
-	dataChannels map[string]*pion.DataChannel
-	closed       bool
+	pc             *pion.PeerConnection
+	config         EngineConfig
+	mu             sync.Mutex
+	dataChannels   map[string]*pion.DataChannel
+	closed         bool
+	reconnectCfg   ReconnectConfig
+	reconnectStop  chan struct{}
+	restarting     bool
+	restartMu      sync.Mutex
 }
 
 // EngineConfig for WebRTC setup.
@@ -29,6 +64,7 @@ type EngineConfig struct {
 	ICEServers     []string
 	OnDataChannel  func(dc *DataChannel, label string)
 	OnICEState     func(state pion.ICEConnectionState)
+	Reconnect      ReconnectConfig
 }
 
 // DataChannel wraps pion's DataChannel with convenience methods.
@@ -69,8 +105,17 @@ func (dc *DataChannel) OnMessage(fn func([]byte)) {
 func NewEngine(fn func(*EngineConfig)) (*Engine, error) {
 	cfg := &EngineConfig{
 		ICEServers: []string{"stun:stun.l.google.com:19302"},
+		Reconnect:  DefaultReconnectConfig(),
 	}
 	fn(cfg)
+
+	// Apply reconnect defaults for zero-value fields
+	if cfg.Reconnect.InitialBackoff == 0 {
+		cfg.Reconnect.InitialBackoff = 5 * time.Second
+	}
+	if cfg.Reconnect.MaxBackoff == 0 {
+		cfg.Reconnect.MaxBackoff = 60 * time.Second
+	}
 
 	// ICE servers
 	iceServers := make([]pion.ICEServer, len(cfg.ICEServers))
@@ -105,9 +150,11 @@ func NewEngine(fn func(*EngineConfig)) (*Engine, error) {
 	}
 
 	e := &Engine{
-		pc:           pc,
-		config:       *cfg,
-		dataChannels: make(map[string]*pion.DataChannel),
+		pc:            pc,
+		config:        *cfg,
+		dataChannels:  make(map[string]*pion.DataChannel),
+		reconnectCfg:  cfg.Reconnect,
+		reconnectStop: make(chan struct{}),
 	}
 
 	// ICE state handler
@@ -116,9 +163,30 @@ func NewEngine(fn func(*EngineConfig)) (*Engine, error) {
 		if cfg.OnICEState != nil {
 			cfg.OnICEState(state)
 		}
-		if state == pion.ICEConnectionStateFailed ||
-			state == pion.ICEConnectionStateDisconnected {
-			e.Close()
+
+		switch state {
+		case pion.ICEConnectionStateFailed,
+			pion.ICEConnectionStateDisconnected:
+
+			// Do NOT immediately close — attempt ICE restart with backoff
+			go e.reconnectLoop()
+
+		case pion.ICEConnectionStateConnected,
+			pion.ICEConnectionStateCompleted:
+
+			// Reconnection succeeded — stop any active reconnect cycle
+			e.restartMu.Lock()
+			if e.restarting {
+				e.restarting = false
+				select {
+				case e.reconnectStop <- struct{}{}:
+				default:
+				}
+				if e.reconnectCfg.OnReconnectSuccess != nil {
+					e.reconnectCfg.OnReconnectSuccess()
+				}
+			}
+			e.restartMu.Unlock()
 		}
 	})
 
@@ -274,6 +342,120 @@ func (e *Engine) AddVideoTrack() (*pion.TrackLocalStaticSample, error) {
 	return track, nil
 }
 
+// reconnectLoop attempts ICE restart with exponential backoff.
+// It runs in a goroutine and exits when reconnection succeeds, the engine is closed,
+// or max attempts are exhausted.
+func (e *Engine) reconnectLoop() {
+	e.restartMu.Lock()
+	if e.restarting {
+		e.restartMu.Unlock()
+		return // already reconnecting
+	}
+	e.restarting = true
+	e.restartMu.Unlock()
+
+	backoff := e.reconnectCfg.InitialBackoff
+	attempt := 0
+	max := e.reconnectCfg.MaxAttempts
+
+	for {
+		attempt++
+
+		if e.reconnectCfg.OnReconnectStart != nil {
+			e.reconnectCfg.OnReconnectStart(attempt)
+		}
+
+		log.Info().
+			Int("attempt", attempt).
+			Dur("backoff", backoff).
+			Msg("ICE restart: reconnecting")
+
+		// Perform ICE restart by creating a new offer with ICERestart flag
+		if err := e.restartICE(); err != nil {
+			log.Warn().
+				Int("attempt", attempt).
+				Err(err).
+				Msg("ICE restart attempt failed")
+
+			// Check if we've exhausted max attempts
+			if max > 0 && attempt >= max {
+				log.Error().
+					Int("attempts", attempt).
+					Msg("ICE restart max attempts exhausted, giving up")
+
+				e.restartMu.Lock()
+				e.restarting = false
+				e.restartMu.Unlock()
+
+				if e.reconnectCfg.OnReconnectFailed != nil {
+					e.reconnectCfg.OnReconnectFailed()
+				}
+				e.Close()
+				return
+			}
+
+			// Exponential backoff
+			select {
+			case <-e.reconnectStop:
+				// We were told to stop (connection recovered or engine closed)
+				e.restartMu.Lock()
+				e.restarting = false
+				e.restartMu.Unlock()
+				return
+			case <-time.After(backoff):
+				backoff *= 2
+				if backoff > e.reconnectCfg.MaxBackoff {
+					backoff = e.reconnectCfg.MaxBackoff
+				}
+			}
+			continue
+		}
+
+		// restartICE succeeded — connection recovered
+		e.restartMu.Lock()
+		e.restarting = false
+		e.restartMu.Unlock()
+		return
+	}
+}
+
+// restartICE performs an ICE restart by creating a new offer.
+// It sets the ICERestart flag to force new ICE candidates.
+func (e *Engine) restartICE() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.closed {
+		return fmt.Errorf("engine is closed")
+	}
+
+	// Create a new offer with ICE restart
+	offer, err := e.pc.CreateOffer(&pion.OfferOptions{
+		ICERestart: true,
+	})
+	if err != nil {
+		return fmt.Errorf("create ICE restart offer: %w", err)
+	}
+
+	if err := e.pc.SetLocalDescription(offer); err != nil {
+		return fmt.Errorf("set local description for ICE restart: %w", err)
+	}
+
+	// Send the new offer via the signaling server
+	offerMsg := protocol.NewMessage(protocol.MsgOffer, map[string]interface{}{
+		"type": offer.Type.String(),
+		"sdp":  offer.SDP,
+	})
+	offerMsg.Room = e.config.RoomID
+
+	if err := e.config.SignalConn.WriteJSON(offerMsg); err != nil {
+		return fmt.Errorf("send ICE restart offer: %w", err)
+	}
+
+	log.Info().Msg("ICE restart offer sent via signaling")
+	return nil
+}
+
 // Close terminates the peer connection.
 func (e *Engine) Close() error {
 	e.mu.Lock()
@@ -282,6 +464,18 @@ func (e *Engine) Close() error {
 		return nil
 	}
 	e.closed = true
+
+	// Stop any active reconnect cycle
+	e.restartMu.Lock()
+	if e.restarting {
+		e.restarting = false
+		select {
+		case e.reconnectStop <- struct{}{}:
+		default:
+		}
+	}
+	e.restartMu.Unlock()
+
 	return e.pc.Close()
 }
 

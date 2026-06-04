@@ -46,6 +46,10 @@ type Session struct {
 	ScreenStreamer *screen.Streamer
 	CreatedAt      time.Time
 	Authed         bool
+	// Reconnect state
+	reconnecting bool
+	disconnected bool
+	mu           sync.Mutex
 }
 
 // NewDaemon creates a new host daemon.
@@ -100,7 +104,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	defer d.cleanup()
 
 	backoff := d.cfg.ReconnectWait
-	maxBackoff := 60 * time.Second
+	maxBackoff := d.cfg.ReconnectMaxWait
 	if maxBackoff < backoff {
 		maxBackoff = backoff
 	}
@@ -284,6 +288,28 @@ func (d *Daemon) handleConnectRequest(msg protocol.Message) {
 		cfg.RoomID = payload.Room
 		cfg.OnDataChannel = d.onDataChannel(payload.Room)
 		cfg.ICEServers = []string{"stun:stun.l.google.com:19302"}
+		cfg.Reconnect = webrtc.ReconnectConfig{
+			InitialBackoff: 5 * time.Second,
+			MaxBackoff:     60 * time.Second,
+			MaxAttempts:    10,
+			OnReconnectStart: func(attempt int) {
+				d.log.Warn().
+					Str("room", payload.Room).
+					Int("attempt", attempt).
+					Msg("WebRTC ICE restart attempt")
+			},
+			OnReconnectSuccess: func() {
+				d.log.Info().
+					Str("room", payload.Room).
+					Msg("WebRTC ICE restart succeeded")
+			},
+			OnReconnectFailed: func() {
+				d.log.Error().
+					Str("room", payload.Room).
+					Msg("WebRTC ICE restart failed, cleaning up session")
+				d.cleanupSession(payload.Room)
+			},
+		}
 	})
 	if err != nil {
 		d.log.Error().Err(err).Msg("Failed to create WebRTC engine")
@@ -593,21 +619,41 @@ func (d *Daemon) handlePeerDisconnect(msg protocol.Message) {
 	d.mu.Lock()
 	for id, sess := range d.sessions {
 		if sess.ClientID == payload.PeerID {
-			if sess.PTYSess != nil {
-				sess.PTYSess.Close()
-			}
-			if sess.ScreenStreamer != nil {
-				sess.ScreenStreamer.Stop()
-			}
 			if sess.WebRTC != nil {
 				sess.WebRTC.Close()
 			}
-			delete(d.sessions, id)
+			d.cleanupSessionLocked(id, sess)
 		}
 	}
 	d.mu.Unlock()
 
 	d.log.Info().Str("peer", payload.PeerID).Msg("Client disconnected")
+}
+
+// cleanupSession removes and cleans up a single session by room ID.
+func (d *Daemon) cleanupSession(roomID string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	sess, ok := d.sessions[roomID]
+	if !ok {
+		return
+	}
+	d.cleanupSessionLocked(roomID, sess)
+}
+
+// cleanupSessionLocked removes and cleans up a session (caller must hold d.mu).
+func (d *Daemon) cleanupSessionLocked(roomID string, sess *Session) {
+	if sess.PTYSess != nil {
+		sess.PTYSess.Close()
+	}
+	if sess.ScreenStreamer != nil {
+		sess.ScreenStreamer.Stop()
+	}
+	if sess.WebRTC != nil {
+		sess.WebRTC.Close()
+	}
+	delete(d.sessions, roomID)
+	d.log.Info().Str("room", roomID).Msg("Session cleaned up")
 }
 
 func (d *Daemon) handleError(msg protocol.Message) {
@@ -639,16 +685,7 @@ func (d *Daemon) cleanup() {
 	defer d.mu.Unlock()
 
 	for id, sess := range d.sessions {
-		if sess.PTYSess != nil {
-			sess.PTYSess.Close()
-		}
-		if sess.ScreenStreamer != nil {
-			sess.ScreenStreamer.Stop()
-		}
-		if sess.WebRTC != nil {
-			sess.WebRTC.Close()
-		}
-		delete(d.sessions, id)
+		d.cleanupSessionLocked(id, sess)
 	}
 
 	if d.signalConn != nil {

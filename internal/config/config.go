@@ -15,15 +15,16 @@ import (
 
 // Defaults
 const (
-	DefaultSignalPort    = 9000
-	DefaultSignalHost    = "0.0.0.0"
-	DefaultWebPort       = 3000
-	DefaultSTUNServer    = "stun:stun.l.google.com:19302"
-	DefaultReconnectWait = 5 * time.Second
-	DefaultHeartbeatInt  = 15 * time.Second
+	DefaultSignalPort     = 9000
+	DefaultSignalHost     = "0.0.0.0"
+	DefaultWebPort        = 3000
+	DefaultSTUNServer     = "stun:stun.l.google.com:19302"
+	DefaultReconnectWait  = 5 * time.Second
+	DefaultReconnectMaxWait = 60 * time.Second
+	DefaultHeartbeatInt   = 15 * time.Second
 	DefaultSessionTimeout = 30 * time.Minute
-	DefaultMaxSessions   = 10
-	DefaultLogLevel      = "info"
+	DefaultMaxSessions    = 10
+	DefaultLogLevel       = "info"
 )
 
 // Config is the top-level configuration.
@@ -64,20 +65,21 @@ type TLSConfig struct {
 
 // HostConfig for the host daemon.
 type HostConfig struct {
-	SignalURL      string        `mapstructure:"signal_url"`
-	Name           string        `mapstructure:"name"`
-	MasterPassword string        `mapstructure:"master_password"`
-	MasterHash     string        `mapstructure:"master_hash"`
-	AllowList      []string      `mapstructure:"allow_list"`
-	Features       []string      `mapstructure:"features"`
-	ReconnectWait  time.Duration `mapstructure:"reconnect_wait"`
-	HeartbeatInt   time.Duration `mapstructure:"heartbeat_interval"`
-	SessionTimeout time.Duration `mapstructure:"session_timeout"`
-	MaxSessions    int           `mapstructure:"max_sessions"`
-	RequireAuth    bool          `mapstructure:"require_auth"`
-	DeviceID       string        `mapstructure:"device_id"`
-	ShowQR         bool          `mapstructure:"show_qr"`
-	OnRegistered   func(peerID string)
+	SignalURL       string        `mapstructure:"signal_url"`
+	Name            string        `mapstructure:"name"`
+	MasterPassword  string        `mapstructure:"master_password"`
+	MasterHash      string        `mapstructure:"master_hash"`
+	AllowList       []string      `mapstructure:"allow_list"`
+	Features        []string      `mapstructure:"features"`
+	ReconnectWait   time.Duration `mapstructure:"reconnect_wait"`
+	ReconnectMaxWait time.Duration `mapstructure:"reconnect_max_wait"`
+	HeartbeatInt    time.Duration `mapstructure:"heartbeat_interval"`
+	SessionTimeout  time.Duration `mapstructure:"session_timeout"`
+	MaxSessions     int           `mapstructure:"max_sessions"`
+	RequireAuth     bool          `mapstructure:"require_auth"`
+	DeviceID        string        `mapstructure:"device_id"`
+	ShowQR          bool          `mapstructure:"show_qr"`
+	OnRegistered    func(peerID string)
 }
 
 // ClientConfig for the client.
@@ -123,6 +125,7 @@ func Load(configPath string) (*Config, error) {
 	v.SetDefault("signal.rate_limit", 60)
 	v.SetDefault("signal.dev_mode", false)
 	v.SetDefault("host.reconnect_wait", DefaultReconnectWait)
+	v.SetDefault("host.reconnect_max_wait", DefaultReconnectMaxWait)
 	v.SetDefault("host.heartbeat_interval", DefaultHeartbeatInt)
 	v.SetDefault("host.session_timeout", DefaultSessionTimeout)
 	v.SetDefault("host.max_sessions", 0) // 0 = unlimited

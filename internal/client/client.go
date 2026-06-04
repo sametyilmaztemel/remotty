@@ -1,11 +1,13 @@
 // Package client provides the remotty client for connecting to remote hosts.
 package client
+
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/signal"
+	gosignal "os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/gorilla/websocket"
@@ -201,6 +203,38 @@ func (c *Client) ConnectInteractive(ctx context.Context) error {
 			if n > 0 {
 				terminalDC.Send(buf[:n])
 			}
+		}
+	}()
+
+	// Monitor terminal resize (SIGWINCH) and send MsgResize events
+	var lastRows, lastCols int
+	lastRows, lastCols = height, width
+	resizeCh := make(chan os.Signal, 1)
+	gosignal.Notify(resizeCh, syscall.SIGWINCH)
+	defer gosignal.Stop(resizeCh)
+
+	var resizeMu sync.Mutex
+	go func() {
+		for range resizeCh {
+			w, h, err := term.GetSize(0)
+			if err != nil {
+				continue
+			}
+			resizeMu.Lock()
+			if w == lastCols && h == lastRows {
+				resizeMu.Unlock()
+				continue
+			}
+			lastCols, lastRows = w, h
+			resizeMu.Unlock()
+
+			c.log.Debug().
+				Int("rows", h).Int("cols", w).
+				Msg("Terminal resized, sending resize event")
+			terminalDC.SendJSON(protocol.NewMessage(protocol.MsgResize, protocol.ResizePayload{
+				Rows: uint16(h),
+				Cols: uint16(w),
+			}))
 		}
 	}()
 
