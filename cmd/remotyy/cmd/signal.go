@@ -40,6 +40,9 @@ but never sees terminal or screen data.`,
 		if v, _ := cmd.Flags().GetString("tls-key"); v != "" {
 			cfg.TLS.KeyFile = v
 		}
+		if v, _ := cmd.Flags().GetString("web-dir"); v != "" {
+			cfg.WebDir = v
+		}
 
 		// Env overrides
 		if authToken := os.Getenv("REMOTYY_AUTH_TOKEN"); authToken != "" {
@@ -71,4 +74,5 @@ func init() {
 	signalCmd.Flags().Bool("tls", false, "Enable TLS")
 	signalCmd.Flags().String("tls-cert", "", "TLS certificate file")
 	signalCmd.Flags().String("tls-key", "", "TLS key file")
+	signalCmd.Flags().String("web-dir", "", "Web UI directory to serve (e.g. ./web/dist)")
 }

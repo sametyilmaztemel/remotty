@@ -161,7 +161,7 @@ private struct ActionButtons: View {
                     .buttonStyle(.bordered)
                     
                     Button(action: {
-                        if let url = URL(string: "http://localhost:3000") {
+                        if let url = URL(string: "http://localhost:9000") {
                             NSWorkspace.shared.open(url)
                         }
                     }) {

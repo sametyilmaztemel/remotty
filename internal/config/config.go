@@ -51,6 +51,7 @@ type SignalConfig struct {
 	AuthToken string        `mapstructure:"auth_token"`
 	RateLimit int           `mapstructure:"rate_limit"`
 	DevMode   bool          `mapstructure:"dev_mode"`
+	WebDir    string        `mapstructure:"web_dir"`
 }
 
 // TLSConfig for encrypted connections.

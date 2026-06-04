@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -100,6 +101,17 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/api/hosts", s.handleListHostsAPI)
 	mux.HandleFunc("/api/stats", s.handleStats)
+
+	// Serve web UI if configured
+	if s.cfg.WebDir != "" {
+		if info, err := os.Stat(s.cfg.WebDir); err == nil && info.IsDir() {
+			fileServer := http.FileServer(http.Dir(s.cfg.WebDir))
+			mux.Handle("/", fileServer)
+			s.log.Info().Str("web_dir", s.cfg.WebDir).Msg("Serving web UI")
+		} else {
+			s.log.Warn().Str("web_dir", s.cfg.WebDir).Err(err).Msg("Web UI directory not found")
+		}
+	}
 
 	addr := s.cfg.Addr()
 	s.httpServer = &http.Server{
