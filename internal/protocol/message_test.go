@@ -63,6 +63,10 @@ func TestMessageTypes(t *testing.T) {
 		{MsgOffer, "offer"},
 		{MsgAuthOK, "auth_ok"},
 		{MsgFileChunk, "file_chunk"},
+		{MsgFileComplete, "file_complete"},
+		{MsgFileError, "file_error"},
+		{MsgClipboardData, "clipboard_data"},
+		{MsgClipboardRequest, "clipboard_request"},
 	}
 
 	for _, tt := range tests {

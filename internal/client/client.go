@@ -162,6 +162,7 @@ func (c *Client) ConnectInteractive(ctx context.Context) error {
 
 	terminalDC := engine.CreateDataChannel("terminal")
 	authDC := engine.CreateDataChannel("auth")
+	transferDC := engine.CreateDataChannel("transfer")
 
 	// Send auth if password provided
 	if c.cfg.MasterPassword != "" {
@@ -237,6 +238,49 @@ func (c *Client) ConnectInteractive(ctx context.Context) error {
 		} else if msg.Type == protocol.MsgAuthFail {
 			fmt.Println("\r❌ Authentication failed")
 			close(done)
+		}
+	})
+
+	// Handle transfer data channel messages (file transfer progress/errors)
+	transferDC.OnMessage(func(data []byte) {
+		var msg protocol.Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return
+		}
+
+		switch msg.Type {
+		case protocol.MsgFileProgress:
+			var progress protocol.FileProgressPayload
+			if err := json.Unmarshal(msg.Payload, &progress); err != nil {
+				return
+			}
+			fmt.Printf("\r📦 Transfer %s: %d/%d bytes",
+				progress.TransferID, progress.BytesSent, progress.TotalBytes)
+
+		case protocol.MsgFileComplete:
+			var complete protocol.FileTransferCompletePayload
+			if err := json.Unmarshal(msg.Payload, &complete); err != nil {
+				return
+			}
+			fmt.Printf("\r✅ Transfer %s complete: %d bytes\n",
+				complete.TransferID, complete.Size)
+
+		case protocol.MsgFileError:
+			var errPayload protocol.FileTransferErrorPayload
+			if err := json.Unmarshal(msg.Payload, &errPayload); err != nil {
+				return
+			}
+			fmt.Printf("\r❌ Transfer %s error [%s]: %s\n",
+				errPayload.TransferID, errPayload.Code, errPayload.Message)
+
+		case protocol.MsgFileAccept:
+			var acceptPayload struct {
+				TransferID string `json:"transfer_id"`
+			}
+			if err := json.Unmarshal(msg.Payload, &acceptPayload); err != nil {
+				return
+			}
+			fmt.Printf("\r✅ Transfer %s accepted by host\n", acceptPayload.TransferID)
 		}
 	})
 

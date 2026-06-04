@@ -3,10 +3,10 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /remotty-signal ./cmd/remotty-signal
+RUN CGO_ENABLED=0 go build -o /remotty-signal ./cmd/remotty
 
 FROM alpine:3.19
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /remotty-signal /usr/local/bin/
 EXPOSE 9000
-ENTRYPOINT ["remotty-signal"]
+ENTRYPOINT ["remotty-signal", "signal"]

@@ -197,6 +197,8 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 		if token != s.cfg.AuthToken {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			s.log.Audit.Log("auth_rejected", "", "", r.RemoteAddr,
+				"WebSocket auth token rejected", false)
 			log.Warn().Str("remote", r.RemoteAddr).Msg("WebSocket auth rejected")
 			return
 		}
@@ -218,6 +220,9 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	peer.log = log.With().Str("peer", peer.ID).Str("remote", r.RemoteAddr).Logger()
+
+	s.log.Audit.Log("ws_connect", peer.ID, "", peer.RemoteAddr,
+		fmt.Sprintf("path=/ws"), true)
 
 	peer.log.Info().Msg("New WebSocket connection")
 
@@ -518,6 +523,10 @@ func (s *Server) cleanupPeer(peer *Peer) {
 
 	s.log.Audit.Log("peer_disconnect", peer.ID, "", peer.RemoteAddr,
 		fmt.Sprintf("role=%s", peer.Role), true)
+	if peer.RoomID != "" {
+		s.log.Audit.Log("room_destroyed", peer.ID, peer.RoomID, peer.RemoteAddr,
+			fmt.Sprintf("role=%s cleanup", peer.Role), true)
+	}
 
 	log.Info().
 		Str("peer", peer.ID).
@@ -646,6 +655,7 @@ func withMiddleware(next http.Handler, dev bool, rl *RateLimiter, allowedOrigins
 		if rl != nil {
 			ip := extractIP(r.RemoteAddr)
 			if !rl.Allow(ip) {
+				log.Warn().Str("ip", ip).Str("path", r.URL.Path).Msg("Rate limit exceeded")
 				http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
 				return
 			}

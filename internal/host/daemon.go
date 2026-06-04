@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sync"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"github.com/sametyilmaztemel/remotty/internal/protocol"
 	"github.com/sametyilmaztemel/remotty/internal/pty"
 	"github.com/sametyilmaztemel/remotty/internal/screen"
+	"github.com/sametyilmaztemel/remotty/internal/transfer"
 	"github.com/sametyilmaztemel/remotty/internal/webrtc"
 )
 
@@ -32,10 +34,12 @@ type Daemon struct {
 	peerID     string
 	webrtcEng  *webrtc.Engine
 	ptyMgr     *pty.Manager
+	transferMgr *transfer.Manager
 	sessions   map[string]*Session
 	mu         sync.RWMutex
 	done       chan struct{}
 	log        zerolog.Logger
+	clipMon    *ClipboardMonitor
 
 	localAPI     *http.Server
 	localAPIOnce sync.Once
@@ -95,12 +99,18 @@ func NewDaemon(cfg config.HostConfig, log zerolog.Logger) (*Daemon, error) {
 		cfg.MaxSessions = 10
 	}
 
+	dataDir := "$HOME/.remotty"
+	if home, err := os.UserHomeDir(); err == nil {
+		dataDir = filepath.Join(home, ".remotty")
+	}
+
 	return &Daemon{
-		cfg:      cfg,
-		ptyMgr:   pty.NewManager(),
-		sessions: make(map[string]*Session),
-		done:     make(chan struct{}),
-		log:      log.With().Str("component", "host").Logger(),
+		cfg:         cfg,
+		ptyMgr:     pty.NewManager(),
+		transferMgr: transfer.NewManager(dataDir),
+		sessions:    make(map[string]*Session),
+		done:        make(chan struct{}),
+		log:         log.With().Str("component", "host").Logger(),
 	}, nil
 }
 
@@ -365,10 +375,12 @@ func (d *Daemon) onDataChannel(roomID string) func(*webrtc.DataChannel, string) 
 			d.handleTerminalChannel(session, dc)
 		case "screen":
 			d.handleScreenChannel(session, dc)
+		case "transfer":
+			d.handleTransferChannel(session, dc)
 		case "file":
 			d.handleFileChannel(session, dc)
 		case "clipboard":
-			d.handleClipboardChannel(dc)
+			d.handleClipboardChannel(session, dc)
 		}
 	}
 }
@@ -602,20 +614,325 @@ func (d *Daemon) handleScreenChannel(session *Session, dc *webrtc.DataChannel) {
 	})
 }
 
-func (d *Daemon) handleFileChannel(session *Session, dc *webrtc.DataChannel) {
-	// File transfer — handled via data channel
-}
+func (d *Daemon) handleTransferChannel(session *Session, dc *webrtc.DataChannel) {
+	if !session.Authed {
+		dc.SendJSON(protocol.NewMessage(protocol.MsgError, "Not authenticated"))
+		return
+	}
 
-func (d *Daemon) handleClipboardChannel(dc *webrtc.DataChannel) {
 	dc.OnMessage(func(data []byte) {
 		var msg protocol.Message
-		json.Unmarshal(data, &msg)
-		if msg.Type == protocol.MsgClipboard {
-			var clip protocol.ClipboardPayload
-			json.Unmarshal(msg.Payload, &clip)
-			// Sync clipboard
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return
+		}
+
+		switch msg.Type {
+		case protocol.MsgFileRequest:
+			var req protocol.FileRequestPayload
+			if err := json.Unmarshal(msg.Payload, &req); err != nil {
+				return
+			}
+
+			// Prepare to receive the file
+			t, err := d.transferMgr.InitiateReceive(req)
+			if err != nil {
+				d.log.Error().Err(err).Msg("Failed to initiate receive")
+				dc.SendJSON(protocol.NewMessage(protocol.MsgFileError,
+					protocol.FileTransferErrorPayload{
+						TransferID: req.TransferID,
+						Code:       "init_failed",
+						Message:    err.Error(),
+					}))
+				return
+			}
+
+			d.log.Info().
+				Str("transfer_id", t.ID).
+				Str("name", t.Name).
+				Int64("size", t.Size).
+				Msg("Incoming file transfer, accepting")
+
+			// Auto-accept the file transfer
+			dc.SendJSON(protocol.NewMessage(protocol.MsgFileAccept, map[string]interface{}{
+				"transfer_id": req.TransferID,
+			}))
+
+		case protocol.MsgFileChunk:
+			var chunk protocol.FileChunkPayload
+			if err := json.Unmarshal(msg.Payload, &chunk); err != nil {
+				return
+			}
+
+			t := d.transferMgr.Get(chunk.TransferID)
+			if t == nil {
+				d.log.Warn().Str("transfer_id", chunk.TransferID).Msg("Unknown transfer for chunk")
+				return
+			}
+
+			if err := t.WriteChunk(chunk.Index, chunk.Data, chunk.Checksum); err != nil {
+				d.log.Error().Err(err).
+					Str("transfer_id", chunk.TransferID).
+					Int("chunk", chunk.Index).
+					Msg("Failed to write chunk")
+				dc.SendJSON(protocol.NewMessage(protocol.MsgFileError,
+					protocol.FileTransferErrorPayload{
+						TransferID: chunk.TransferID,
+						Code:       "write_failed",
+						Message:    err.Error(),
+					}))
+				return
+			}
+
+			// Report progress
+			dc.SendJSON(protocol.NewMessage(protocol.MsgFileProgress,
+				protocol.FileProgressPayload{
+					TransferID: chunk.TransferID,
+					BytesSent:  t.BytesSent,
+					TotalBytes: t.Size,
+				}))
+
+		case protocol.MsgFileComplete:
+			var complete protocol.FileTransferCompletePayload
+			if err := json.Unmarshal(msg.Payload, &complete); err != nil {
+				return
+			}
+
+			t := d.transferMgr.Get(complete.TransferID)
+			if t == nil {
+				return
+			}
+			t.Complete()
+			d.log.Info().
+				Str("name", t.Name).
+				Str("path", t.Path).
+				Int64("size", complete.Size).
+				Msg("File transfer completed")
+
+		case protocol.MsgFileCancel:
+			var cancelPayload struct {
+				TransferID string `json:"transfer_id"`
+			}
+			if err := json.Unmarshal(msg.Payload, &cancelPayload); err != nil {
+				return
+			}
+			t := d.transferMgr.Get(cancelPayload.TransferID)
+			if t != nil {
+				t.Cancel()
+				d.log.Info().Str("transfer_id", cancelPayload.TransferID).Msg("File transfer cancelled")
+			}
+
+		case protocol.MsgFileError:
+			var errPayload protocol.FileTransferErrorPayload
+			if err := json.Unmarshal(msg.Payload, &errPayload); err != nil {
+				return
+			}
+			t := d.transferMgr.Get(errPayload.TransferID)
+			if t != nil {
+				t.Cancel()
+			}
+			d.log.Warn().
+				Str("transfer_id", errPayload.TransferID).
+				Str("code", errPayload.Code).
+				Str("message", errPayload.Message).
+				Msg("File transfer error from client")
 		}
 	})
+}
+
+func (d *Daemon) handleFileChannel(session *Session, dc *webrtc.DataChannel) {
+	if !session.Authed {
+		dc.SendJSON(protocol.NewMessage(protocol.MsgError, "Not authenticated"))
+		return
+	}
+
+	d.log.Info().Str("label", "file").Msg("File channel handler initialized")
+
+	dc.OnMessage(func(data []byte) {
+		var msg protocol.Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			d.log.Warn().Err(err).Msg("Failed to unmarshal file channel message")
+			return
+		}
+
+		switch msg.Type {
+		case protocol.MsgFileRequest:
+			var req protocol.FileRequestPayload
+			if err := json.Unmarshal(msg.Payload, &req); err != nil {
+				d.log.Warn().Err(err).Msg("Failed to unmarshal file request")
+				return
+			}
+
+			// Initiate receive via transfer manager
+			t, err := d.transferMgr.InitiateReceive(req)
+			if err != nil {
+				d.log.Error().Err(err).Msg("Failed to initiate file receive")
+				dc.SendJSON(protocol.NewMessage(protocol.MsgFileError,
+					protocol.FileTransferErrorPayload{
+						TransferID: req.TransferID,
+						Code:       "init_failed",
+						Message:    err.Error(),
+					}))
+				return
+			}
+
+			d.log.Info().
+				Str("transfer_id", t.ID).
+				Str("name", t.Name).
+				Int64("size", t.Size).
+				Msg("Incoming file transfer, auto-accepting")
+
+			// Auto-accept the transfer
+			dc.SendJSON(protocol.NewMessage(protocol.MsgFileAccept, map[string]interface{}{
+				"transfer_id": req.TransferID,
+			}))
+
+		case protocol.MsgFileChunk:
+			var chunk protocol.FileChunkPayload
+			if err := json.Unmarshal(msg.Payload, &chunk); err != nil {
+				d.log.Warn().Err(err).Msg("Failed to unmarshal file chunk")
+				return
+			}
+
+			// Decode base64 data if needed (Data is []byte, JSON auto-decodes,
+			// but some clients may send base64 string that needs explicit handling)
+			if len(chunk.Data) > 0 {
+				// Check if the data looks like a base64 string (ASCII printable range)
+				decoded, err := base64.StdEncoding.DecodeString(string(chunk.Data))
+				if err == nil && len(decoded) > 0 {
+					chunk.Data = decoded
+				}
+			}
+
+			t := d.transferMgr.Get(chunk.TransferID)
+			if t == nil {
+				d.log.Warn().Str("transfer_id", chunk.TransferID).Msg("Unknown transfer for chunk")
+				dc.SendJSON(protocol.NewMessage(protocol.MsgFileError,
+					protocol.FileTransferErrorPayload{
+						TransferID: chunk.TransferID,
+						Code:       "unknown_transfer",
+						Message:    "No active transfer with this ID",
+					}))
+				return
+			}
+
+			if err := t.WriteChunk(chunk.Index, chunk.Data, chunk.Checksum); err != nil {
+				d.log.Error().Err(err).
+					Str("transfer_id", chunk.TransferID).
+					Int("chunk", chunk.Index).
+					Msg("Failed to write chunk")
+				dc.SendJSON(protocol.NewMessage(protocol.MsgFileError,
+					protocol.FileTransferErrorPayload{
+						TransferID: chunk.TransferID,
+						Code:       "write_failed",
+						Message:    err.Error(),
+					}))
+				return
+			}
+
+			// Report progress
+			dc.SendJSON(protocol.NewMessage(protocol.MsgFileProgress,
+				protocol.FileProgressPayload{
+					TransferID: chunk.TransferID,
+					BytesSent:  t.BytesSent,
+					TotalBytes: t.Size,
+				}))
+
+		case protocol.MsgFileComplete:
+			var complete protocol.FileTransferCompletePayload
+			if err := json.Unmarshal(msg.Payload, &complete); err != nil {
+				d.log.Warn().Err(err).Msg("Failed to unmarshal file complete")
+				return
+			}
+
+			t := d.transferMgr.Get(complete.TransferID)
+			if t == nil {
+				d.log.Warn().Str("transfer_id", complete.TransferID).Msg("Unknown transfer for completion")
+				return
+			}
+			t.Complete()
+
+			d.log.Info().
+				Str("name", t.Name).
+				Str("path", t.Path).
+				Int64("size", complete.Size).
+				Msg("File transfer completed")
+
+		case protocol.MsgFileCancel:
+			var cancelPayload struct {
+				TransferID string `json:"transfer_id"`
+			}
+			if err := json.Unmarshal(msg.Payload, &cancelPayload); err != nil {
+				d.log.Warn().Err(err).Msg("Failed to unmarshal file cancel")
+				return
+			}
+			t := d.transferMgr.Get(cancelPayload.TransferID)
+			if t != nil {
+				t.Cancel()
+				d.log.Info().
+					Str("transfer_id", cancelPayload.TransferID).
+					Msg("File transfer cancelled by peer")
+			}
+
+		case protocol.MsgFileError:
+			var errPayload protocol.FileTransferErrorPayload
+			if err := json.Unmarshal(msg.Payload, &errPayload); err != nil {
+				d.log.Warn().Err(err).Msg("Failed to unmarshal file error")
+				return
+			}
+			t := d.transferMgr.Get(errPayload.TransferID)
+			if t != nil {
+				t.Cancel()
+			}
+			d.log.Warn().
+				Str("transfer_id", errPayload.TransferID).
+				Str("code", errPayload.Code).
+				Str("message", errPayload.Message).
+				Msg("File transfer error from peer")
+		}
+	})
+}
+
+func (d *Daemon) handleClipboardChannel(session *Session, dc *webrtc.DataChannel) {
+	// Start clipboard monitoring when the clipboard channel opens
+	if d.clipMon == nil {
+		d.clipMon = NewClipboardMonitor(d.log)
+	}
+
+	// Start the monitor
+	if err := d.clipMon.Start(); err != nil {
+		d.log.Warn().Err(err).Msg("Failed to start clipboard monitor")
+		return
+	}
+
+	// Register callback for host-to-client clipboard changes
+	d.clipMon.OnChange(func(text string) {
+		d.sendClipboardUpdate(dc, text)
+	})
+
+	// Send initial clipboard content to client
+	if content, err := d.clipMon.Get(); err == nil && content != "" {
+		d.sendClipboardUpdate(dc, content)
+	}
+
+	// Handle incoming messages from client
+	dc.OnMessage(func(data []byte) {
+		var msg protocol.Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return
+		}
+
+		switch msg.Type {
+		case protocol.MsgClipboardData:
+			d.handleClipboardData(dc, msg)
+		case protocol.MsgClipboardRequest:
+			// Respond with current clipboard content
+			if content, err := d.clipMon.Get(); err == nil && content != "" {
+				d.sendClipboardUpdate(dc, content)
+			}
+		}
+	})
+
+	d.log.Info().Msg("Clipboard channel initialized")
 }
 
 func (d *Daemon) handlePeerDisconnect(msg protocol.Message) {
@@ -751,6 +1068,11 @@ func (d *Daemon) handleSessionsAPI(w http.ResponseWriter, r *http.Request) {
 
 func (d *Daemon) cleanup() {
 	d.log.Info().Msg("Cleaning up host daemon")
+
+	// Stop clipboard monitor
+	if d.clipMon != nil {
+		d.clipMon.Stop()
+	}
 
 	// Shutdown local API server
 	if d.localAPI != nil {

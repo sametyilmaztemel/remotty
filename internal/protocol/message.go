@@ -57,11 +57,14 @@ const (
 	MsgFileReject   MessageType = "file_reject"
 	MsgFileChunk    MessageType = "file_chunk"
 	MsgFileComplete MessageType = "file_complete"
+	MsgFileError     MessageType = "file_error"
 	MsgFileProgress MessageType = "file_progress"
 	MsgFileCancel   MessageType = "file_cancel"
 
 	// Data Channel — Clipboard
-	MsgClipboard MessageType = "clipboard"
+	MsgClipboard        MessageType = "clipboard"
+	MsgClipboardData    MessageType = "clipboard_data"
+	MsgClipboardRequest MessageType = "clipboard_request"
 
 	// Data Channel — Keepalive
 	MsgPing MessageType = "ping"
@@ -160,6 +163,20 @@ type FileProgressPayload struct {
 	Speed      int64  `json:"speed"` // bytes/sec
 }
 
+// FileTransferCompletePayload signals file transfer completion.
+type FileTransferCompletePayload struct {
+	TransferID string `json:"transfer_id"`
+	Checksum   string `json:"checksum,omitempty"` // SHA256 of entire file
+	Size       int64  `json:"size"`
+}
+
+// FileTransferErrorPayload reports a file transfer error.
+type FileTransferErrorPayload struct {
+	TransferID string `json:"transfer_id"`
+	Code       string `json:"code"`
+	Message    string `json:"message"`
+}
+
 // ScreenConfigPayload configures screen sharing.
 type ScreenConfigPayload struct {
 	FPS           int  `json:"fps"`
@@ -197,4 +214,16 @@ type KeyPayload struct {
 // ClipboardPayload carries clipboard contents.
 type ClipboardPayload struct {
 	Text string `json:"text"`
+}
+
+
+// ClipboardData carries clipboard content for data sync.
+type ClipboardData struct {
+	ClipboardText string `json:"clipboard_text"`
+	Timestamp     int64  `json:"timestamp,omitempty"`
+}
+
+// ClipboardRequest requests the current clipboard content from the peer.
+type ClipboardRequest struct {
+	RequestID string `json:"request_id,omitempty"`
 }

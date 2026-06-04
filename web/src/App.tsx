@@ -5,10 +5,11 @@ import HostList from './components/HostList';
 import TerminalView from './components/TerminalView';
 import ScreenViewer from './components/ScreenViewer';
 import FileTransfer from './components/FileTransfer';
+import ClipboardPanel from './components/ClipboardPanel';
 import HelpView from './components/HelpView';
 import type { HostInfo } from './lib/protocol';
 
-type View = 'connect' | 'hosts' | 'terminal' | 'screen' | 'files' | 'help';
+type View = 'connect' | 'hosts' | 'terminal' | 'screen' | 'files' | 'clipboard' | 'help';
 
 function App() {
   const [view, setView] = useState<View>('connect');
@@ -68,6 +69,13 @@ function App() {
             >
               📁 Files
             </button>
+            <button
+              className={`nav-item ${view === 'clipboard' ? 'active' : ''}`}
+              onClick={() => setView('clipboard')}
+              disabled={!selectedHost}
+            >
+              📋 Clipboard
+            </button>
           </nav>
           <div className="sidebar-footer">
             <button
@@ -104,6 +112,9 @@ function App() {
           )}
           {view === 'files' && selectedHost && (
             <FileTransfer host={selectedHost} signalUrl={signalUrl} />
+          )}
+          {view === 'clipboard' && selectedHost && (
+            <ClipboardPanel host={selectedHost} />
           )}
           {view === 'help' && (
             <HelpView />

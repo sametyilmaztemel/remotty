@@ -213,3 +213,9 @@ func (t *Transfer) Progress() float64 {
 	}
 	return float64(t.ReceivedChunks) / float64(t.TotalChunks)
 }
+// Get returns a transfer by ID.
+func (m *Manager) Get(id string) *Transfer {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.transfers[id]
+}

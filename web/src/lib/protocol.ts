@@ -14,6 +14,7 @@ export type MessageType =
   | 'file_chunk' | 'file_complete' | 'file_progress'
   | 'file_cancel'
   | 'clipboard'
+  | 'clipboard_data' | 'clipboard_request'
   | 'ping' | 'pong'
   | 'error';
 
@@ -104,3 +105,18 @@ export type ScreenDCMessage =
   | { type: 'mouse_click'; payload: MouseClickPayload }
   | { type: 'mouse_scroll'; payload: MouseScrollPayload }
   | { type: 'key_press'; payload: KeyPressPayload };
+
+// ─── Clipboard ─────────────────────────────────────
+
+export interface ClipboardPayload {
+  text: string;
+}
+
+export interface ClipboardDataPayload {
+  clipboard_text: string;
+  timestamp?: number;
+}
+
+export interface ClipboardRequestPayload {
+  request_id?: string;
+}

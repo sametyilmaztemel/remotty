@@ -136,7 +136,10 @@ func TestMessageTypeConstants(t *testing.T) {
 		{MsgFileRequest, "file_request"},
 		{MsgFileChunk, "file_chunk"},
 		{MsgFileComplete, "file_complete"},
+		{MsgFileError, "file_error"},
 		{MsgClipboard, "clipboard"},
+		{MsgClipboardData, "clipboard_data"},
+		{MsgClipboardRequest, "clipboard_request"},
 		{MsgPing, "ping"},
 		{MsgPong, "pong"},
 		{MsgError, "error"},
@@ -360,6 +363,51 @@ func TestClipboardPayloadRoundtrip(t *testing.T) {
 		t.Errorf("Text: got %q, want %q", decoded.Text, original.Text)
 	}
 }
+func TestClipboardDataRoundtrip(t *testing.T) {
+	original := ClipboardData{ClipboardText: "clip data here", Timestamp: 1717500123}
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var decoded ClipboardData
+	json.Unmarshal(data, &decoded)
+	if decoded.ClipboardText != original.ClipboardText {
+		t.Errorf("ClipboardText: got %q, want %q", decoded.ClipboardText, original.ClipboardText)
+	}
+	if decoded.Timestamp != original.Timestamp {
+		t.Errorf("Timestamp: got %d, want %d", decoded.Timestamp, original.Timestamp)
+	}
+}
+
+func TestClipboardRequestRoundtrip(t *testing.T) {
+	original := ClipboardRequest{RequestID: "req-001"}
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var decoded ClipboardRequest
+	json.Unmarshal(data, &decoded)
+	if decoded.RequestID != original.RequestID {
+		t.Errorf("RequestID: got %q, want %q", decoded.RequestID, original.RequestID)
+	}
+}
+
+func TestClipboardDataEmptyText(t *testing.T) {
+	original := ClipboardData{Timestamp: 1717500999}
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var decoded ClipboardData
+	json.Unmarshal(data, &decoded)
+	if decoded.ClipboardText != "" {
+		t.Errorf("ClipboardText: got %q, want empty", decoded.ClipboardText)
+	}
+	if decoded.Timestamp != 1717500999 {
+		t.Errorf("Timestamp: got %d, want 1717500999", decoded.Timestamp)
+	}
+}
+
 
 func TestFileProgressPayloadRoundtrip(t *testing.T) {
 	original := FileProgressPayload{
@@ -382,6 +430,34 @@ func TestFileProgressPayloadRoundtrip(t *testing.T) {
 	}
 	if decoded.Speed != original.Speed {
 		t.Errorf("Speed: got %d, want %d", decoded.Speed, original.Speed)
+	}
+}
+
+func TestFileTransferCompletePayloadRoundTrip(t *testing.T) {
+	original := FileTransferCompletePayload{
+		TransferID: "xfer-001",
+		Checksum:   "sha256-abc123def456",
+		Size:       1048576,
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var decoded FileTransferCompletePayload
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if decoded.TransferID != original.TransferID {
+		t.Errorf("TransferID: got %q, want %q", decoded.TransferID, original.TransferID)
+	}
+	if decoded.Checksum != original.Checksum {
+		t.Errorf("Checksum: got %q, want %q", decoded.Checksum, original.Checksum)
+	}
+	if decoded.Size != original.Size {
+		t.Errorf("Size: got %d, want %d", decoded.Size, original.Size)
 	}
 }
 
@@ -414,5 +490,33 @@ func TestMouseClickPayloadValues(t *testing.T) {
 		if decoded.Button != tc.Button || decoded.X != tc.X || decoded.Y != tc.Y || decoded.Down != tc.Down {
 			t.Errorf("case %d: got Button=%d X=%f Y=%f Down=%v", i, decoded.Button, decoded.X, decoded.Y, decoded.Down)
 		}
+	}
+}
+
+func TestFileTransferErrorPayloadRoundTrip(t *testing.T) {
+	original := FileTransferErrorPayload{
+		TransferID: "xfer-001",
+		Code:       "disk_full",
+		Message:    "No space left on device",
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var decoded FileTransferErrorPayload
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if decoded.TransferID != original.TransferID {
+		t.Errorf("TransferID: got %q, want %q", decoded.TransferID, original.TransferID)
+	}
+	if decoded.Code != original.Code {
+		t.Errorf("Code: got %q, want %q", decoded.Code, original.Code)
+	}
+	if decoded.Message != original.Message {
+		t.Errorf("Message: got %q, want %q", decoded.Message, original.Message)
 	}
 }

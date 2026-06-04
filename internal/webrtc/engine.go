@@ -14,6 +14,18 @@ import (
 	"github.com/sametyilmaztemel/remotty/internal/protocol"
 )
 
+
+// Data channel labels used across the system.
+const (
+	DataChannelAuth      = "auth"
+	DataChannelTerminal  = "terminal"
+	DataChannelScreen    = "screen"
+	DataChannelTransfer  = "transfer"
+	DataChannelClipboard = "clipboard"
+	DataChannelFile      = "file"
+)
+
+
 // ReconnectConfig configures ICE restart reconnection behaviour.
 type ReconnectConfig struct {
 	// InitialBackoff is the initial delay before the first reconnection attempt.

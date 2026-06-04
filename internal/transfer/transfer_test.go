@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/sametyilmaztemel/remotty/internal/protocol"
@@ -194,5 +195,157 @@ func TestWriteChunkNotActive(t *testing.T) {
 	err := tf.WriteChunk(0, []byte("data"), "")
 	if err == nil {
 		t.Error("WriteChunk on non-active transfer should error")
+	}
+}
+
+func TestReadChunk(t *testing.T) {
+	dir := t.TempDir()
+	testFile := filepath.Join(dir, "readchunk.bin")
+
+	// Write test data: twice the chunk size so we can test chunk indexing
+	const chunkSize = 64
+	data := make([]byte, chunkSize*2)
+	for i := range data {
+		data[i] = byte(i % 256)
+	}
+	if err := os.WriteFile(testFile, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	tf := &Transfer{
+		Path:      testFile,
+		State:     TransferActive,
+		ChunkSize: chunkSize,
+		Size:      int64(len(data)),
+	}
+
+	// Read first chunk
+	chunk1, checksum1, err := tf.ReadChunk(0)
+	if err != nil {
+		t.Fatalf("ReadChunk(0): %v", err)
+	}
+	if len(chunk1) != chunkSize {
+		t.Errorf("chunk0 len = %d, want %d", len(chunk1), chunkSize)
+	}
+
+	// Verify checksum
+	h := sha256.Sum256(chunk1)
+	if hex.EncodeToString(h[:]) != checksum1 {
+		t.Error("checksum mismatch on chunk 0")
+	}
+
+	// Read second chunk (should be smaller since it's the last)
+	chunk2, checksum2, err := tf.ReadChunk(1)
+	if err != nil {
+		t.Fatalf("ReadChunk(1): %v", err)
+	}
+	if len(chunk2) != chunkSize {
+		t.Errorf("chunk1 len = %d, want %d", len(chunk2), chunkSize)
+	}
+
+	h2 := sha256.Sum256(chunk2)
+	if hex.EncodeToString(h2[:]) != checksum2 {
+		t.Error("checksum mismatch on chunk 1")
+	}
+
+	// Verify content
+	if chunk1[0] != 0 || chunk1[chunkSize-1] != byte((chunkSize-1)%256) {
+		t.Error("unexpected chunk 0 content")
+	}
+}
+
+func TestReadChunkCancelled(t *testing.T) {
+	tf := &Transfer{
+		State: TransferCancelled,
+	}
+	_, _, err := tf.ReadChunk(0)
+	if err == nil {
+		t.Fatal("ReadChunk should fail on cancelled transfer")
+	}
+	if !strings.Contains(err.Error(), "cancelled") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestReadChunkFileError(t *testing.T) {
+	tf := &Transfer{
+		Path:      "/nonexistent/file.bin",
+		State:     TransferActive,
+		ChunkSize: 1024,
+	}
+	_, _, err := tf.ReadChunk(0)
+	if err == nil {
+		t.Fatal("ReadChunk should fail with non-existent file")
+	}
+}
+
+func TestTransferGet(t *testing.T) {
+	m := NewManager(t.TempDir())
+
+	// Initially no transfers
+	if got := m.Get("nonexistent"); got != nil {
+		t.Error("Get for nonexistent id should return nil")
+	}
+
+	// Create a transfer via InitiateSend
+	testFile := filepath.Join(t.TempDir(), "gettest.txt")
+	os.WriteFile(testFile, []byte("data"), 0644)
+	tf, err := m.InitiateSend(testFile)
+	if err != nil {
+		t.Fatalf("InitiateSend: %v", err)
+	}
+
+	// Retrieve by ID
+	got := m.Get(tf.ID)
+	if got == nil {
+		t.Fatal("Get returned nil for existing transfer")
+	}
+	if got.ID != tf.ID {
+		t.Errorf("Get returned transfer with ID %q, want %q", got.ID, tf.ID)
+	}
+	if got.Name != "gettest.txt" {
+		t.Errorf("Get returned transfer with Name %q, want %q", got.Name, "gettest.txt")
+	}
+}
+
+func TestReadChunkWithContent(t *testing.T) {
+	dir := t.TempDir()
+	testFile := filepath.Join(dir, "partial.bin")
+
+	// Write 100 bytes, read with smaller chunk size to test partial read
+	content := []byte("hello world this is a test of partial reads in remotty transfer")
+	if err := os.WriteFile(testFile, content, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	tf := &Transfer{
+		Path:      testFile,
+		State:     TransferActive,
+		ChunkSize: 10, // smaller than file
+		Size:      int64(len(content)),
+	}
+
+	// Read chunk 0 (first 10 bytes)
+	chunk0, _, err := tf.ReadChunk(0)
+	if err != nil {
+		t.Fatalf("ReadChunk(0): %v", err)
+	}
+	if len(chunk0) > 10 {
+		t.Errorf("chunk0 too large: %d bytes", len(chunk0))
+	}
+
+	// Read chunk 1 (next 10 bytes)
+	chunk1, _, err := tf.ReadChunk(1)
+	if err != nil {
+		t.Fatalf("ReadChunk(1): %v", err)
+	}
+	if len(chunk1) > 10 {
+		t.Errorf("chunk1 too large: %d bytes", len(chunk1))
+	}
+
+	// Verify concatenation matches
+	combined := append(chunk0, chunk1...)
+	if string(combined) != string(content[:20]) {
+		t.Errorf("combined mismatch: got %q, want %q", string(combined), content[:20])
 	}
 }

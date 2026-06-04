@@ -233,9 +233,23 @@ func defaultDataDir() string {
 func (c *Config) Validate() error {
 	var errs []string
 
+	// Global
+	if c.Global.DataDir != "" {
+		// Ensure data dir path is absolute
+		if !filepath.IsAbs(c.Global.DataDir) {
+			errs = append(errs, "global.data_dir must be an absolute path")
+		}
+	}
+
 	// Signal server
 	if c.Signal.Port < 0 || c.Signal.Port > 65535 {
 		errs = append(errs, "signal.port must be 0-65535")
+	}
+	if c.Signal.Port == 0 && !c.Signal.DevMode {
+		errs = append(errs, "signal.port must be > 0 when dev_mode is false")
+	}
+	if c.Signal.RateLimit < 0 {
+		errs = append(errs, "signal.rate_limit must be >= 0")
 	}
 	if c.Signal.TLS.Enabled {
 		if c.Signal.TLS.CertFile == "" {
@@ -245,19 +259,70 @@ func (c *Config) Validate() error {
 			errs = append(errs, "signal.tls.key_file is required when TLS enabled")
 		}
 	}
+	// Validate allowed origins
+	for i, origin := range c.Signal.AllowedOrigins {
+		if origin != "*" && !strings.HasPrefix(origin, "http://") && !strings.HasPrefix(origin, "https://") {
+			errs = append(errs, fmt.Sprintf("signal.allowed_origins[%d] must be a valid URL or *", i))
+		}
+	}
 
 	// Host daemon
+	if strings.TrimSpace(c.Host.Name) == "" && !c.Signal.DevMode {
+		errs = append(errs, "host.name must not be empty")
+	}
+	if c.Host.SignalURL != "" {
+		if !strings.HasPrefix(c.Host.SignalURL, "ws://") && !strings.HasPrefix(c.Host.SignalURL, "wss://") {
+			errs = append(errs, "host.signal_url must start with ws:// or wss://")
+		}
+	}
 	if c.Host.ReconnectWait < 0 {
 		errs = append(errs, "host.reconnect_wait must be >= 0")
+	}
+	if c.Host.ReconnectWait > 0 && c.Host.ReconnectWait < time.Second {
+		errs = append(errs, "host.reconnect_wait should be at least 1s")
+	}
+	if c.Host.ReconnectMaxWait < 0 {
+		errs = append(errs, "host.reconnect_max_wait must be >= 0")
+	}
+	if c.Host.ReconnectMaxWait > 0 && c.Host.ReconnectWait > 0 && c.Host.ReconnectMaxWait < c.Host.ReconnectWait {
+		errs = append(errs, "host.reconnect_max_wait must be >= host.reconnect_wait")
 	}
 	if c.Host.HeartbeatInt < 0 {
 		errs = append(errs, "host.heartbeat_interval must be >= 0")
 	}
+	if c.Host.HeartbeatInt > 0 && c.Host.HeartbeatInt < 5*time.Second {
+		errs = append(errs, "host.heartbeat_interval should be at least 5s")
+	}
 	if c.Host.SessionTimeout < 0 {
 		errs = append(errs, "host.session_timeout must be >= 0")
 	}
+	if c.Host.SessionTimeout > 0 && c.Host.SessionTimeout < time.Minute {
+		errs = append(errs, "host.session_timeout should be at least 1m")
+	}
 	if c.Host.MaxSessions < 0 {
 		errs = append(errs, "host.max_sessions must be >= 0")
+	}
+	// Validate features
+	for i, f := range c.Host.Features {
+		validFeatures := []string{"terminal", "screen", "clipboard", "file_transfer"}
+		valid := false
+		for _, vf := range validFeatures {
+			if strings.EqualFold(f, vf) {
+				c.Host.Features[i] = vf // normalize
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			errs = append(errs, fmt.Sprintf("host.features[%d] invalid: %q (valid: %v)", i, f, validFeatures))
+		}
+	}
+
+	// Client
+	if c.Client.SignalURL != "" {
+		if !strings.HasPrefix(c.Client.SignalURL, "ws://") && !strings.HasPrefix(c.Client.SignalURL, "wss://") {
+			errs = append(errs, "client.signal_url must start with ws:// or wss://")
+		}
 	}
 
 	// WebRTC
@@ -266,6 +331,15 @@ func (c *Config) Validate() error {
 	}
 	if c.WebRTC.MaxMessageSize < 0 {
 		errs = append(errs, "webrtc.max_message_size must be >= 0")
+	}
+	if c.WebRTC.MaxMessageSize > 10*1024*1024 {
+		errs = append(errs, "webrtc.max_message_size must be <= 10MB")
+	}
+	// Validate ICE servers
+	for i, s := range c.WebRTC.ICEServers {
+		if !strings.HasPrefix(s, "stun:") && !strings.HasPrefix(s, "turn:") && !strings.HasPrefix(s, "turns:") {
+			errs = append(errs, fmt.Sprintf("webrtc.ice_servers[%d] must start with stun:, turn:, or turns:", i))
+		}
 	}
 
 	// Screen
@@ -278,6 +352,9 @@ func (c *Config) Validate() error {
 	if c.Screen.MaxDimension < 0 {
 		errs = append(errs, "screen.max_dimension must be >= 0")
 	}
+	if c.Screen.MaxDimension > 7680 {
+		errs = append(errs, "screen.max_dimension must be <= 7680 (8K)")
+	}
 
 	// Logging
 	switch strings.ToLower(c.Logging.Level) {
@@ -286,13 +363,22 @@ func (c *Config) Validate() error {
 	default:
 		errs = append(errs, fmt.Sprintf("logging.level invalid: %q", c.Logging.Level))
 	}
+	switch strings.ToLower(c.Logging.Format) {
+	case "json", "console", "":
+		// valid
+	default:
+		errs = append(errs, fmt.Sprintf("logging.format invalid: %q (valid: json, console)", c.Logging.Format))
+	}
 
-	// Security warnings (not errors, just logged)
+	// Security checks
 	if c.Signal.AuthToken == "" && !c.Signal.DevMode {
-		// Will be logged by caller
+		errs = append(errs, "signal.auth_token is empty in production mode (set via REMOTTY_AUTH_TOKEN)")
 	}
 	if c.Host.MasterPassword == "" && c.Host.MasterHash == "" && c.Host.RequireAuth {
 		errs = append(errs, "host.require_auth is true but no master_password/master_hash set")
+	}
+	if c.Host.MasterPassword != "" && c.Host.MasterHash != "" {
+		errs = append(errs, "host.master_password and host.master_hash are mutually exclusive")
 	}
 
 	if len(errs) > 0 {

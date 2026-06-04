@@ -161,3 +161,62 @@ func TestSessionDone(t *testing.T) {
 		t.Error("Done channel should close after session ends")
 	}
 }
+
+func TestSessionReadDirect(t *testing.T) {
+	m := NewManager()
+
+	sess, err := m.Spawn(24, 80)
+	if err != nil {
+		t.Fatalf("Spawn: %v", err)
+	}
+	defer sess.Close()
+
+	// Write a command
+	_, err = sess.Write([]byte("echo read_direct_test\n"))
+	if err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	// Read using the direct Read method (not ReadWithDeadline)
+	buf := make([]byte, 4096)
+	done := make(chan struct{})
+	var n int
+	var readErr error
+
+	go func() {
+		n, readErr = sess.Read(buf)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		if readErr != nil {
+			t.Fatalf("Read: %v", readErr)
+		}
+		if n == 0 {
+			t.Error("expected some output from Read")
+		}
+		t.Logf("Read returned %d bytes", n)
+	case <-time.After(3 * time.Second):
+		t.Fatal("Read timed out")
+	}
+}
+
+func TestSessionInterface(t *testing.T) {
+	// Verify Session implements io.ReadWriter
+	m := NewManager()
+	sess, err := m.Spawn(24, 80)
+	if err != nil {
+		t.Fatalf("Spawn: %v", err)
+	}
+	defer sess.Close()
+
+	// ReadWriter interface check
+	var rw interface{} = sess
+	if _, ok := rw.(interface {
+		Read([]byte) (int, error)
+		Write([]byte) (int, error)
+	}); !ok {
+		t.Error("Session should implement io.ReadWriter")
+	}
+}

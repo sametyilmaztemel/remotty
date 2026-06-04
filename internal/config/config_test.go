@@ -209,10 +209,10 @@ func TestDefaultDataDir(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
-	// Validate should always return nil (warnings only for now)
+	// Empty config should fail with new stricter validation
 	cfg := Config{}
-	if err := cfg.Validate(); err != nil {
-		t.Errorf("Validate() returned error: %v", err)
+	if err := cfg.Validate(); err == nil {
+		t.Error("empty config should fail validation")
 	}
 }
 
@@ -289,8 +289,8 @@ func TestValidateRequireAuthWithoutPassword(t *testing.T) {
 
 func TestValidateRequireAuthWithPassword(t *testing.T) {
 	cfg := Config{
-		Signal:  SignalConfig{Port: 9000},
-		Host:    HostConfig{RequireAuth: true, MasterHash: "$2a$10$somehash"},
+		Signal:  SignalConfig{Port: 9000, DevMode: true},
+		Host:    HostConfig{RequireAuth: true, MasterHash: "$2a$10$somehash", Name: "test-host"},
 		Logging: LoggingConfig{Level: "info"},
 	}
 	if err := cfg.Validate(); err != nil {
