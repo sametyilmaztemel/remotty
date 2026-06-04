@@ -6,3 +6,6 @@
 /remotyy
 /remotyy-host
 /remotyy-signal
+web/node_modules/
+web/dist/
+web/.tmp/

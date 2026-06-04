@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rs/zerolog/log"
 	"github.com/sametyilmaztemel/remotyy/internal/protocol"
 )
 

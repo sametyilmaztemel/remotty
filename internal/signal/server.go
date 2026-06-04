@@ -66,9 +66,9 @@ type Room struct {
 type Server struct {
 	cfg        config.SignalConfig
 	httpServer *http.Server
-	peers      map[string]*Peer      // peerID → Peer
-	rooms      map[string]*Room      // roomID → Room
-	hostIndex  map[string]*Peer      // hostname → Peer (fast lookup)
+	peers      map[string]*Peer
+	rooms      map[string]*Room
+	hostIndex  map[string]*Peer
 	mu         sync.RWMutex
 	peerCount  atomic.Int64
 	roomCount  atomic.Int64
@@ -79,7 +79,7 @@ type Server struct {
 
 // NewServer creates a signaling server.
 func NewServer(cfg config.SignalConfig, log *logging.Logger) *Server {
-	return &Server{
+	s := &Server{
 		cfg:       cfg,
 		peers:     make(map[string]*Peer),
 		rooms:     make(map[string]*Room),
@@ -87,6 +87,8 @@ func NewServer(cfg config.SignalConfig, log *logging.Logger) *Server {
 		log:       log,
 		done:      make(chan struct{}),
 	}
+	s.accepting.Store(true)
+	return s
 }
 
 // Start begins listening for WebSocket connections.
@@ -514,6 +516,16 @@ func (s *Server) sendError(peer *Peer, code, message string) {
 		Code:    0,
 		Message: fmt.Sprintf("%s: %s", code, message),
 	}))
+}
+
+// HTTPHandler returns the HTTP mux for mounting in a custom server.
+func (s *Server) HTTPHandler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws", s.handleWebSocket)
+	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/api/hosts", s.handleListHostsAPI)
+	mux.HandleFunc("/api/stats", s.handleStats)
+	return withMiddleware(mux, s.cfg.DevMode)
 }
 
 // withMiddleware adds CORS, rate limiting, and logging middleware.

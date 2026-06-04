@@ -140,7 +140,7 @@ func (c *Client) ConnectInteractive(ctx context.Context) error {
 	// For now, the host initiates the offer on MsgConnect
 
 	fmt.Println("\n🔗 Connected! Interactive terminal starting...")
-	fmt.Println("Press Ctrl+Q to disconnect.\n")
+	fmt.Println("Press Ctrl+Q to disconnect.")
 
 	// Terminal setup
 	oldState, err := term.MakeRaw(0)
