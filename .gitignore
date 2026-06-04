@@ -20,3 +20,4 @@ ios/remotyy/build/
 xcuserdata/
 DerivedData/
 *.app
+build/
