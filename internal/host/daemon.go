@@ -8,6 +8,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"runtime"
 	"sync"
@@ -34,6 +36,9 @@ type Daemon struct {
 	mu         sync.RWMutex
 	done       chan struct{}
 	log        zerolog.Logger
+
+	localAPI     *http.Server
+	localAPIOnce sync.Once
 }
 
 // Session tracks an active client connection.
@@ -102,6 +107,9 @@ func NewDaemon(cfg config.HostConfig, log zerolog.Logger) (*Daemon, error) {
 // Run starts the host daemon and blocks until context cancellation.
 func (d *Daemon) Run(ctx context.Context) error {
 	defer d.cleanup()
+
+	// Start local HTTP API for macOS menu bar app
+	d.startLocalAPI()
 
 	backoff := d.cfg.ReconnectWait
 	maxBackoff := d.cfg.ReconnectMaxWait
@@ -678,8 +686,80 @@ func (d *Daemon) sendError(roomID string, code int, message string) {
 	}
 }
 
+// APIResponse is the JSON envelope for local API responses.
+type APIResponse struct {
+	Success  bool           `json:"success"`
+	Sessions []APISession   `json:"sessions,omitempty"`
+	Error    string         `json:"error,omitempty"`
+}
+
+// APISession is the public session representation for the local API.
+type APISession struct {
+	ID        string `json:"id"`
+	ClientID  string `json:"client_id"`
+	CreatedAt string `json:"created_at"`
+	Duration  string `json:"duration"`
+	Authed    bool   `json:"authed"`
+}
+
+// startLocalAPI starts a local HTTP server on 127.0.0.1:9876 for the macOS menu bar app.
+func (d *Daemon) startLocalAPI() {
+	d.localAPIOnce.Do(func() {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/api/sessions", d.handleSessionsAPI)
+
+		d.localAPI = &http.Server{
+			Addr:    "127.0.0.1:9876",
+			Handler: mux,
+		}
+
+		listener, err := net.Listen("tcp", "127.0.0.1:9876")
+		if err != nil {
+			d.log.Warn().Err(err).Msg("Failed to start local API server (port 9876 may be in use)")
+			return
+		}
+
+		go func() {
+			d.log.Info().Msg("Local API server listening on 127.0.0.1:9876")
+			if err := d.localAPI.Serve(listener); err != nil && err != http.ErrServerClosed {
+				d.log.Warn().Err(err).Msg("Local API server stopped")
+			}
+		}()
+	})
+}
+
+func (d *Daemon) handleSessionsAPI(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	d.mu.RLock()
+	apiSessions := make([]APISession, 0, len(d.sessions))
+	for _, sess := range d.sessions {
+		dur := time.Since(sess.CreatedAt)
+		apiSessions = append(apiSessions, APISession{
+			ID:        sess.ID,
+			ClientID:  sess.ClientID,
+			CreatedAt: sess.CreatedAt.Format(time.RFC3339),
+			Duration:  fmt.Sprintf("%dm%ds", int(dur.Minutes()), int(dur.Seconds())%60),
+			Authed:    sess.Authed,
+		})
+	}
+	d.mu.RUnlock()
+
+	resp := APIResponse{Success: true, Sessions: apiSessions}
+	json.NewEncoder(w).Encode(resp)
+}
+
 func (d *Daemon) cleanup() {
 	d.log.Info().Msg("Cleaning up host daemon")
+
+	// Shutdown local API server
+	if d.localAPI != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := d.localAPI.Shutdown(ctx); err != nil {
+			d.log.Warn().Err(err).Msg("Local API shutdown error")
+		}
+	}
 
 	d.mu.Lock()
 	defer d.mu.Unlock()

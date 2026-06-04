@@ -5,6 +5,7 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var host: HostManager!
+    private var menuRefreshTimer: Timer?
 
     private var settingsWC: NSWindowController?
 
@@ -18,9 +19,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         buildMenu()
         updateIcon()
-        
+
         // Auto-start host daemon
         host.startHost()
+
+        // Periodically refresh menu to update session list
+        startMenuRefresh()
+    }
+
+    // MARK: - Menu Refresh
+
+    private func startMenuRefresh() {
+        menuRefreshTimer?.invalidate()
+        menuRefreshTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            // Only rebuild if sessions or running state changed
+            self.buildMenu()
+            self.updateIcon()
+        }
     }
 
     // MARK: - Icon
@@ -49,7 +65,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             string: host.isRunning ? "●  Running" : "○  Stopped", attributes: attrs)
         si.isEnabled = false
         menu.addItem(si)
-        menu.addItem(.separator())
+
+        // Sessions list
+        if host.isRunning {
+            if host.sessions.isEmpty {
+                let noSess = NSMenuItem(title: "No connected devices",
+                                       action: nil, keyEquivalent: "")
+                noSess.isEnabled = false
+                noSess.attributedTitle = NSAttributedString(
+                    string: "No connected devices",
+                    attributes: [.foregroundColor: NSColor.tertiaryLabelColor,
+                                .font: NSFont.systemFont(ofSize: 12)])
+                menu.addItem(noSess)
+            } else {
+                // Session header
+                let sessHeader = NSMenuItem(title: "Connected Devices",
+                                           action: nil, keyEquivalent: "")
+                sessHeader.isEnabled = false
+                let headerAttrs: [NSAttributedString.Key: Any] = [
+                    .foregroundColor: NSColor.secondaryLabelColor,
+                    .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+                ]
+                sessHeader.attributedTitle = NSAttributedString(
+                    string: "CONNECTED DEVICES", attributes: headerAttrs)
+                menu.addItem(sessHeader)
+
+                for session in host.sessions {
+                    let sessItem = NSMenuItem()
+                    sessItem.isEnabled = false
+
+                    let statusColor: NSColor = session.authed ? NSColor.systemGreen : NSColor.systemOrange
+                    let deviceText = session.displayName
+                    let durationText = session.duration
+                    let statusIcon = session.authed ? "✓" : "⋯"
+
+                    let paragraph = NSMutableParagraphStyle()
+                    paragraph.lineSpacing = 2
+
+                    let sessAttrs: [NSAttributedString.Key: Any] = [
+                        .font: NSFont.systemFont(ofSize: 12),
+                        .foregroundColor: NSColor.labelColor,
+                        .paragraphStyle: paragraph,
+                    ]
+                    let detailAttrs: [NSAttributedString.Key: Any] = [
+                        .font: NSFont.systemFont(ofSize: 10),
+                        .foregroundColor: NSColor.secondaryLabelColor,
+                        .paragraphStyle: paragraph,
+                    ]
+
+                    let str = NSMutableAttributedString()
+                    str.append(NSAttributedString(string: "\(statusIcon) ", attributes: [
+                        .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .medium),
+                        .foregroundColor: statusColor,
+                    ]))
+                    str.append(NSAttributedString(string: deviceText, attributes: sessAttrs))
+                    str.append(NSAttributedString(string: "\n", attributes: sessAttrs))
+                    str.append(NSAttributedString(string: "   \(durationText)  ·  \(session.statusLabel)", attributes: detailAttrs))
+
+                    sessItem.attributedTitle = str
+                    menu.addItem(sessItem)
+                }
+            }
+
+            menu.addItem(.separator())
+        }
 
         // Start / Stop
         let ti = NSMenuItem(title: host.isRunning ? "Stop Host" : "Start Host",
@@ -102,6 +181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggleScreenShare() {
         host.toggleScreenShare()
+        buildMenu()
     }
 
     @objc private func openSettings() {

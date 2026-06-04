@@ -122,7 +122,7 @@ describe('SignalingClient', () => {
 
     // @ts-expect-error accessing private for test
     const ws = client.ws as MockWebSocket;
-    ws.receive({ type: 'test' });
+    ws.receive({ type: 'test' as any });
 
     expect(received).toHaveLength(0);
     client.disconnect();

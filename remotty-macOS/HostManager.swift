@@ -4,6 +4,27 @@ import ServiceManagement
 
 let Log = OSLog(subsystem: "com.remotty.macos", category: "general")
 
+// MARK: - SessionInfo
+
+public struct SessionInfo: Codable, Identifiable {
+    public let id: String
+    public let client_id: String
+    public let created_at: String
+    public let duration: String
+    public let authed: Bool
+
+    public var displayName: String {
+        // Use client_id as device name (truncated for display)
+        let name = client_id.isEmpty ? id : client_id
+        if name.hasPrefix("p-") { return "Device \(name.dropFirst(2).prefix(8))" }
+        return name
+    }
+
+    public var statusLabel: String {
+        authed ? "Connected" : "Authenticating…"
+    }
+}
+
 // MARK: - HostManager
 
 public class HostManager: ObservableObject {
@@ -14,9 +35,11 @@ public class HostManager: ObservableObject {
     @Published public var masterPassword: String = ""
     @Published public var launchAtLogin: Bool { didSet { updateLaunchAtLogin() } }
     @Published public private(set) var screenSharing = false
+    @Published public private(set) var sessions: [SessionInfo] = []
 
     private var hostProcess: Process?
     private var healthTimer: Timer?
+    private var sessionPollTimer: Timer?
     private var screenProcess: Process?
 
     /// Singleton access for AppKit / target-action callbacks
@@ -85,6 +108,7 @@ public class HostManager: ObservableObject {
             DispatchQueue.main.async {
                 self?.isRunning = false
                 self?.hostProcess = nil
+                self?.sessions = []
                 self?.healthTimer?.invalidate()
                 self?.healthTimer = nil
                 let st = proc.terminationStatus
@@ -97,6 +121,7 @@ public class HostManager: ObservableObject {
             hostProcess = process
             isRunning = true
             statusMessage = "Running \u{2014} \(name)"
+            startSessionPolling()
             healthTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
                 guard let self = self, let p = self.hostProcess, !p.isRunning else { return }
                 Task {
@@ -118,6 +143,7 @@ public class HostManager: ObservableObject {
         }
         hostProcess = nil
         isRunning = false
+        stopSessionPolling()
         healthTimer?.invalidate()
         healthTimer = nil
         statusMessage = "Stopped"
@@ -173,6 +199,52 @@ public class HostManager: ObservableObject {
         }
         screenProcess = nil
         screenSharing = false
+    }
+
+    // MARK: - Session Polling
+
+    private func startSessionPolling() {
+        stopSessionPolling()
+        pollSessions()
+        sessionPollTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            self?.pollSessions()
+        }
+    }
+
+    private func stopSessionPolling() {
+        sessionPollTimer?.invalidate()
+        sessionPollTimer = nil
+    }
+
+    private func pollSessions() {
+        guard isRunning else {
+            if !sessions.isEmpty { sessions = [] }
+            return
+        }
+
+        guard let url = URL(string: "http://127.0.0.1:9876/api/sessions") else { return }
+
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, error in
+            guard let self = self else { return }
+            guard error == nil, let data = data else {
+                os_log("Session poll failed: %{public}s", log: Log, type: .error,
+                       error?.localizedDescription ?? "no data")
+                return
+            }
+
+            struct APIResponse: Codable {
+                let success: Bool
+                let sessions: [SessionInfo]?
+            }
+
+            if let response = try? JSONDecoder().decode(APIResponse.self, from: data),
+               response.success,
+               let sessions = response.sessions {
+                DispatchQueue.main.async {
+                    self.sessions = sessions
+                }
+            }
+        }.resume()
     }
 
     // MARK: - Helpers
