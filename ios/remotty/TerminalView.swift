@@ -1,20 +1,28 @@
 import SwiftUI
 import UIKit
+import Combine
 
+// MARK: - Terminal View
+
+/// SwiftUI terminal that displays PTY output from the WebRTC terminal data channel
+/// and provides a keyboard toolbar with common terminal control sequences (^C, TAB, ESC, arrows).
 struct TerminalView: View {
     let host: HostInfo
     @EnvironmentObject private var app: AppState
 
+    // MARK: Local state
+
     @State private var inputText: String = ""
     @State private var outputText: String = ""
     @State private var connectionState: WebRTCState = .disconnected
+    @State private var cancellables = Set<AnyCancellable>()
+    @FocusState private var isInputFocused: Bool
 
-    // Scroll handling
-    @State private var scrollProxy: ScrollViewProxy?
+    // MARK: Body
 
     var body: some View {
         VStack(spacing: 0) {
-            // Terminal Output
+            // Terminal Output Area
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
@@ -30,15 +38,11 @@ struct TerminalView: View {
                 .background(Color(white: 0.05))
                 .onChange(of: outputText) { _ in
                     withAnimation(.easeOut(duration: 0.1)) {
-                        proxy.scrollTo("bottom")
+                        proxy.scrollTo("bottom", anchor: .bottom)
                     }
                 }
-                .onAppear {
-                    scrollProxy = proxy
-                }
-                // Tap anywhere to focus input
                 .onTapGesture {
-                    // focus the text field programmatically
+                    isInputFocused = true
                 }
             }
 
@@ -53,6 +57,7 @@ struct TerminalView: View {
                     .disableAutocorrection(true)
                     .onSubmit(sendCommand)
                     .disabled(connectionState != .connected)
+                    .focused($isInputFocused)
 
                 Button(action: sendCommand) {
                     Image(systemName: "arrow.up.circle.fill")
@@ -66,6 +71,7 @@ struct TerminalView: View {
         .navigationTitle(host.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            // Connection status indicator (top-right)
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: 6) {
                     Circle()
@@ -75,13 +81,176 @@ struct TerminalView: View {
                         .font(.caption2)
                 }
             }
+
+            // Keyboard toolbar with common terminal control sequences
+            ToolbarItemGroup(placement: .keyboard) {
+                keyboardToolbarContent
+            }
         }
         .onAppear {
             connectToHost()
+            observeWebRTCService()
+
+            // Auto-focus input shortly after appearing
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                isInputFocused = true
+            }
         }
         .onDisappear {
+            cancellables.removeAll()
             disconnectFromHost()
         }
+    }
+
+    // MARK: - Keyboard Toolbar
+
+    /// Content shown above the software keyboard when the text field is active.
+    @ViewBuilder
+    private var keyboardToolbarContent: some View {
+        Group {
+            ctrlCButton
+            Spacer()
+            tabButton
+            Spacer()
+            escButton
+            Spacer()
+            arrowButtons
+            Spacer()
+            dismissKeyboardButton
+        }
+        .disabled(connectionState != .connected)
+        .buttonStyle(.plain)
+    }
+
+    /// Send Ctrl+C (ETX — \x03) to interrupt the foreground process.
+    private var ctrlCButton: some View {
+        Button(action: { sendControlSequence("\u{0003}") }) {
+            Text("^C")
+                .font(.caption.bold())
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.red.opacity(0.25))
+                .cornerRadius(6)
+        }
+    }
+
+    /// Send a literal TAB character.
+    private var tabButton: some View {
+        Button(action: { sendControlSequence("\t") }) {
+            Text("TAB")
+                .font(.caption.bold())
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.blue.opacity(0.25))
+                .cornerRadius(6)
+        }
+    }
+
+    /// Send ESC (Escape — \x1b).
+    private var escButton: some View {
+        Button(action: { sendControlSequence("\u{001b}") }) {
+            Text("ESC")
+                .font(.caption.bold())
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(Color.orange.opacity(0.25))
+                .cornerRadius(6)
+        }
+    }
+
+    /// Arrow key cluster: up / down / left / right.
+    private var arrowButtons: some View {
+        HStack(spacing: 4) {
+            arrowButton(systemName: "arrowtriangle.up.fill",    sequence: "\u{001b}[A")
+            arrowButton(systemName: "arrowtriangle.down.fill",  sequence: "\u{001b}[B")
+            arrowButton(systemName: "arrowtriangle.left.fill",  sequence: "\u{001b}[D")
+            arrowButton(systemName: "arrowtriangle.right.fill", sequence: "\u{001b}[C")
+        }
+    }
+
+    private func arrowButton(systemName: String, sequence: String) -> some View {
+        Button(action: { sendControlSequence(sequence) }) {
+            Image(systemName: systemName)
+                .font(.caption)
+                .padding(8)
+                .background(Color.gray.opacity(0.2))
+                .cornerRadius(6)
+        }
+    }
+
+    /// Dismiss the software keyboard.
+    private var dismissKeyboardButton: some View {
+        Button(action: { isInputFocused = false }) {
+            Image(systemName: "keyboard.chevron.compact.down")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+
+    // MARK: - Sending Data
+
+    /// Send a control sequence (raw bytes) over the terminal data channel.
+    private func sendControlSequence(_ sequence: String) {
+        app.webRTCService.sendTerminalInput(sequence)
+    }
+
+    /// Send the current input text as a command (appends newline).
+    private func sendCommand() {
+        guard !inputText.isEmpty, connectionState == .connected else { return }
+        let cmd = inputText + "\n"
+        app.webRTCService.sendTerminalInput(cmd)
+        inputText = ""
+    }
+
+    /// Notify the remote host of the terminal size.
+    private func sendTerminalResize() {
+        app.webRTCService.sendTerminalResize(rows: 24, cols: 80)
+    }
+
+    // MARK: - Connection Lifecycle
+
+    private func connectToHost() {
+        connectionState = .connecting
+        app.webRTCService.connect(
+            signalURL: app.signalURL,
+            hostID: host.id,
+            password: nil
+        )
+    }
+
+    private func disconnectFromHost() {
+        app.webRTCService.disconnect()
+    }
+
+    // MARK: - Combine Observation
+
+    /// Subscribe to `WebRTCService` publishers so the view stays in sync
+    /// without polling.
+    private func observeWebRTCService() {
+        // Connection state
+        app.webRTCService.$state
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                guard let self = self else { return }
+                self.connectionState = state
+                if state == .connected {
+                    self.sendTerminalResize()
+                    // Auto-focus when connection is established
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        self.isInputFocused = true
+                    }
+                }
+            }
+            .store(in: &cancellables)
+
+        // Terminal output — the service appends incoming text to
+        // `terminalOutput` as it arrives, so we just mirror it.
+        app.webRTCService.$terminalOutput
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] output in
+                self?.outputText = output
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Helpers
@@ -95,7 +264,7 @@ struct TerminalView: View {
         case .error(let msg):
             return "Error: \(msg)\n"
         case .connected:
-            return "Connected to \(host.name)\n$ "
+            return "Connected to \(host.name)\n"
         }
     }
 
@@ -118,94 +287,6 @@ struct TerminalView: View {
         case .connecting:   return "Connecting..."
         case .connected:    return "Connected"
         case .error(let msg): return msg
-        }
-    }
-
-    // MARK: - Connection
-
-    private func connectToHost() {
-        connectionState = .connecting
-
-        // Set up WebRTC service callbacks
-        app.webRTCService.delegate = nil // Will use closure-based observation
-        app.webRTCService.connect(
-            signalURL: app.signalURL,
-            hostID: host.id,
-            password: nil
-        )
-
-        // Observe connection state via Combine
-        // We use a simple polling approach for the @Published property
-        DispatchQueue.main.async { [weak self] in
-            self?.pollConnectionState()
-        }
-
-        // Observe terminal output
-        DispatchQueue.main.async { [weak self] in
-            self?.pollTerminalOutput()
-        }
-    }
-
-    private func disconnectFromHost() {
-        app.webRTCService.disconnect()
-    }
-
-    /// Poll the WebRTC service's published connection state.
-    private func pollConnectionState() {
-        guard connectionState.connectedOrConnecting else { return }
-
-        let newState = app.webRTCService.state
-        if newState != connectionState {
-            connectionState = newState
-            if newState == .connected {
-                // Send terminal resize on connect
-                sendTerminalResize()
-            }
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.pollConnectionState()
-        }
-    }
-
-    /// Poll for new terminal output.
-    private func pollTerminalOutput() {
-        guard connectionState.connectedOrConnecting else { return }
-
-        let output = app.webRTCService.terminalOutput
-        if !output.isEmpty && !outputText.hasSuffix(output) {
-            outputText = output
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-            self?.pollTerminalOutput()
-        }
-    }
-
-    // MARK: - Commands
-
-    private func sendCommand() {
-        guard !inputText.isEmpty, connectionState == .connected else { return }
-
-        let cmd = inputText + "\n"
-        outputText += "$ " + inputText + "\n"
-        app.webRTCService.sendTerminalInput(cmd)
-        inputText = ""
-    }
-
-    private func sendTerminalResize() {
-        // Approximate terminal size: 80 cols × 24 rows
-        app.webRTCService.sendTerminalResize(rows: 24, cols: 80)
-    }
-}
-
-// MARK: - WebRTCState convenience
-
-private extension WebRTCState {
-    var connectedOrConnecting: Bool {
-        switch self {
-        case .connected, .connecting: return true
-        case .disconnected, .error:   return false
         }
     }
 }

@@ -1,6 +1,7 @@
 package host
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/rs/zerolog"
@@ -136,7 +137,19 @@ func TestNewDaemonFeaturesDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDaemon: %v", err)
 	}
-	if len(d.cfg.Features) != 1 || d.cfg.Features[0] != "terminal" {
-		t.Errorf("features = %v, want [terminal]", d.cfg.Features)
+
+	// On darwin, the default features include "screen" alongside "terminal"
+	expected := []string{"terminal"}
+	if runtime.GOOS == "darwin" {
+		expected = []string{"terminal", "screen"}
+	}
+
+	if len(d.cfg.Features) != len(expected) {
+		t.Errorf("features = %v, want %v", d.cfg.Features, expected)
+	}
+	for i, f := range expected {
+		if d.cfg.Features[i] != f {
+			t.Errorf("features[%d] = %q, want %q", i, d.cfg.Features[i], f)
+		}
 	}
 }
