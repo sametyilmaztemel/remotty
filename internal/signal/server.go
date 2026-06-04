@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -20,6 +21,12 @@ import (
 	"github.com/sametyilmaztemel/remotyy/internal/config"
 	"github.com/sametyilmaztemel/remotyy/internal/logging"
 	"github.com/sametyilmaztemel/remotyy/internal/protocol"
+)
+
+const (
+	maxHostNameLen   = 64
+	maxPayloadSize   = 1 << 20 // 1MB max incoming message
+	maxFeaturesCount = 20
 )
 
 var upgrader = websocket.Upgrader{
@@ -209,6 +216,12 @@ func (s *Server) readLoop(peer *Peer) {
 			return
 		}
 
+		if len(data) > maxPayloadSize {
+			peer.log.Warn().Int("size", len(data)).Msg("Message too large, dropping")
+			s.sendError(peer, "payload_too_large", fmt.Sprintf("Message exceeds %d bytes", maxPayloadSize))
+			continue
+		}
+
 		var msg protocol.Message
 		if err := json.Unmarshal(data, &msg); err != nil {
 			peer.log.Warn().Err(err).Msg("Invalid message format")
@@ -253,6 +266,21 @@ func (s *Server) handleRegister(peer *Peer, msg protocol.Message) {
 	var reg protocol.RegisterPayload
 	if err := json.Unmarshal(msg.Payload, &reg); err != nil {
 		s.sendError(peer, "invalid_payload", "Cannot parse registration")
+		return
+	}
+
+	// Validate registration fields
+	reg.Name = strings.TrimSpace(reg.Name)
+	if reg.Name == "" {
+		s.sendError(peer, "invalid_payload", "Host name is required")
+		return
+	}
+	if len(reg.Name) > maxHostNameLen {
+		s.sendError(peer, "invalid_payload", fmt.Sprintf("Host name too long (max %d chars)", maxHostNameLen))
+		return
+	}
+	if len(reg.Features) > maxFeaturesCount {
+		s.sendError(peer, "invalid_payload", fmt.Sprintf("Too many features (max %d)", maxFeaturesCount))
 		return
 	}
 

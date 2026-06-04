@@ -317,3 +317,129 @@ func toRaw(v interface{}) json.RawMessage {
 	data, _ := json.Marshal(v)
 	return data
 }
+
+func TestRegisterEmptyName(t *testing.T) {
+	_, ts := newTestServer(t)
+	conn := dialWS(t, wsURL(ts))
+	defer conn.Close()
+
+	conn.WriteJSON(protocol.NewMessage(protocol.MsgRegister, protocol.RegisterPayload{
+		Name: "", Platform: "linux", Arch: "arm64",
+	}))
+
+	var resp protocol.Message
+	if err := conn.ReadJSON(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Type != protocol.MsgError {
+		t.Errorf("expected error for empty name, got %s", resp.Type)
+	}
+}
+
+func TestRegisterLongName(t *testing.T) {
+	_, ts := newTestServer(t)
+	conn := dialWS(t, wsURL(ts))
+	defer conn.Close()
+
+	longName := strings.Repeat("x", 100)
+	conn.WriteJSON(protocol.NewMessage(protocol.MsgRegister, protocol.RegisterPayload{
+		Name: longName, Platform: "linux", Arch: "arm64",
+	}))
+
+	var resp protocol.Message
+	if err := conn.ReadJSON(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Type != protocol.MsgError {
+		t.Errorf("expected error for long name, got %s", resp.Type)
+	}
+}
+
+func TestRegisterWhitespaceName(t *testing.T) {
+	_, ts := newTestServer(t)
+	conn := dialWS(t, wsURL(ts))
+	defer conn.Close()
+
+	conn.WriteJSON(protocol.NewMessage(protocol.MsgRegister, protocol.RegisterPayload{
+		Name: "   ", Platform: "linux", Arch: "arm64",
+	}))
+
+	var resp protocol.Message
+	if err := conn.ReadJSON(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Type != protocol.MsgError {
+		t.Errorf("expected error for whitespace name, got %s", resp.Type)
+	}
+}
+
+func TestRegisterDuplicateState(t *testing.T) {
+	_, ts := newTestServer(t)
+	conn := dialWS(t, wsURL(ts))
+	defer conn.Close()
+
+	// First registration should succeed
+	conn.WriteJSON(protocol.NewMessage(protocol.MsgRegister, protocol.RegisterPayload{
+		Name: "test-host", Platform: "linux", Arch: "arm64",
+	}))
+	var resp1 protocol.Message
+	conn.ReadJSON(&resp1)
+	if resp1.Type != protocol.MsgRegister {
+		t.Fatalf("first register should succeed, got %s", resp1.Type)
+	}
+
+	// Second registration should fail
+	conn.WriteJSON(protocol.NewMessage(protocol.MsgRegister, protocol.RegisterPayload{
+		Name: "test-host-2", Platform: "linux", Arch: "arm64",
+	}))
+	var resp2 protocol.Message
+	conn.ReadJSON(&resp2)
+	if resp2.Type != protocol.MsgError {
+		t.Errorf("duplicate register should error, got %s", resp2.Type)
+	}
+}
+
+func TestConnectNonExistentHost(t *testing.T) {
+	_, ts := newTestServer(t)
+	conn := dialWS(t, wsURL(ts))
+	defer conn.Close()
+
+	conn.WriteJSON(protocol.NewMessage(protocol.MsgConnect, protocol.ConnectPayload{
+		HostID: "non-existent-id",
+	}))
+
+	var resp protocol.Message
+	if err := conn.ReadJSON(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Type != protocol.MsgError {
+		t.Errorf("expected error for non-existent host, got %s", resp.Type)
+	}
+}
+
+func TestRelayWithoutRoom(t *testing.T) {
+	_, ts := newTestServer(t)
+	conn := dialWS(t, wsURL(ts))
+	defer conn.Close()
+
+	// Register but don't join a room
+	conn.WriteJSON(protocol.NewMessage(protocol.MsgRegister, protocol.RegisterPayload{
+		Name: "solo-host", Platform: "linux", Arch: "arm64",
+	}))
+	var regResp protocol.Message
+	conn.ReadJSON(&regResp)
+
+	// Try to relay an offer without being in a room
+	conn.WriteJSON(protocol.Message{
+		Type:    protocol.MsgOffer,
+		Payload: toRaw(map[string]string{"sdp": "test"}),
+	})
+
+	var resp protocol.Message
+	if err := conn.ReadJSON(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Type != protocol.MsgError {
+		t.Errorf("expected error for relay without room, got %s", resp.Type)
+	}
+}
