@@ -1,0 +1,122 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-go:
+    name: Build Go binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, darwin]
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      
+      - name: Build remotyy
+        run: |
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 \
+            go build -o dist/remotyy-${{ matrix.goos }}-${{ matrix.goarch }} \
+            -ldflags="-s -w -X github.com/remotyy/remotyy/internal/config.Version=${{ github.ref_name }}" \
+            ./cmd/remotyy
+      
+      - name: Package
+        run: |
+          cd dist
+          tar czf remotyy-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz \
+            remotyy-${{ matrix.goos }}-${{ matrix.goarch }}
+      
+      - uses: actions/upload-artifact@v4
+        with:
+          name: remotyy-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/remotyy-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+
+  build-web:
+    name: Build web client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+      
+      - run: cd web && npm ci && npm run build
+      - run: cd web && tar czf ../dist/remotyy-web.tar.gz dist/
+      
+      - uses: actions/upload-artifact@v4
+        with:
+          name: remotyy-web
+          path: dist/remotyy-web.tar.gz
+
+  build-macos-app:
+    name: Build macOS app bundle
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build remotyy binary (universal)
+        run: |
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build \
+            -o dist/remotyy-darwin-arm64 \
+            -ldflags="-s -w" ./cmd/remotyy
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build \
+            -o dist/remotyy-darwin-amd64 \
+            -ldflags="-s -w" ./cmd/remotyy
+          lipo -create -output dist/remotyy dist/remotyy-darwin-arm64 dist/remotyy-darwin-amd64
+      
+      - name: Build SwiftUI app
+        run: |
+          cd remotyy-macOS
+          swift build -c release --product remotyy
+          cd ..
+          
+          # Create .app bundle
+          APP_BUNDLE="dist/remotyy.app"
+          mkdir -p "$APP_BUNDLE/Contents/MacOS"
+          mkdir -p "$APP_BUNDLE/Contents/Resources"
+          
+          cp remotyy-macOS/.build/release/remotyy "$APP_BUNDLE/Contents/MacOS/"
+          cp remotyy-macOS/Info.plist "$APP_BUNDLE/Contents/"
+          
+          # Bundle the Go binary inside the app's Resources
+          cp dist/remotyy "$APP_BUNDLE/Contents/Resources/remotyyd"
+          
+          # Package as .tar.gz (no code sign — ad-hoc)
+          cd dist
+          tar czf remotyy-macos-app.tar.gz remotyy.app
+      
+      - uses: actions/upload-artifact@v4
+        with:
+          name: remotyy-macos-app
+          path: dist/remotyy-macos-app.tar.gz
+
+  release:
+    name: Create Release
+    needs: [build-go, build-web, build-macos-app]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: remotyy-*
+          merge-multiple: true
+      
+      - name: List artifacts
+        run: ls -la
+      
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            *.tar.gz
+          generate_release_notes: true
+          make_latest: true

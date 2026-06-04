@@ -1,99 +1,103 @@
-.PHONY: all build-all build-host build-signal build-cli build-web clean test lint dev
+# remotyy Makefile
+.PHONY: all build build-all build-cli build-web \
+        build-linux-arm64 build-linux-amd64 build-darwin-arm64 build-darwin-amd64 \
+        build-macos-app build-dmg xcode-project build-tauri \
+        release clean test lint dev
 
-# ─── Build ────────────────────────────────────────────────
-BIN_DIR := bin
-VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-COMMIT  := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-DATE    := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-LDFLAGS := -ldflags "-X github.com/sametyilmaztemel/remotyy/internal/config.Version=$(VERSION) -X github.com/sametyilmaztemel/remotyy/internal/config.Commit=$(COMMIT) -X github.com/sametyilmaztemel/remotyy/internal/config.Date=$(DATE)"
+# ─── Config ──────────────────────────────────────────────────
+BIN_DIR   := bin
+VERSION   := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+COMMIT    := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+DATE      := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+GO_LDFLAGS := -ldflags "-s -w -X github.com/remotyy/remotyy/internal/config.Version=$(VERSION)"
 
-all: build-all
+# ─── Go Build (all-in-one binary) ─────────────────────────────
+all: build
 
-build-all: build-host build-signal build-cli
-
-build-host:
-	@echo "Building remotyy-host..."
-	@mkdir -p $(BIN_DIR)
-	CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN_DIR)/remotyy-host ./cmd/remotyy-host
-
-build-signal:
-	@echo "Building remotyy-signal..."
-	@mkdir -p $(BIN_DIR)
-	CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN_DIR)/remotyy-signal ./cmd/remotyy-signal
+build: build-cli
 
 build-cli:
-	@echo "Building remotyy..."
+	@echo "🔨 Building remotyy $(VERSION)..."
 	@mkdir -p $(BIN_DIR)
-	CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN_DIR)/remotyy ./cmd/remotyy
+	CGO_ENABLED=0 go build $(GO_LDFLAGS) -o $(BIN_DIR)/remotyy ./cmd/remotyy
+	@echo "✅ Built: $(BIN_DIR)/remotyy"
 
-build-web:
-	@echo "Building web client..."
-	cd web && npm run build
-
-# ─── Cross-compile ────────────────────────────────────────
-build-linux-arm:
-	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN_DIR)/remotyy-host-linux-arm64 ./cmd/remotyy-host
-	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN_DIR)/remotyy-signal-linux-arm64 ./cmd/remotyy-signal
-	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN_DIR)/remotyy-linux-arm64 ./cmd/remotyy
+# ─── Cross-compile ────────────────────────────────────────────
+build-linux-arm64:
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build $(GO_LDFLAGS) -o $(BIN_DIR)/remotyy-linux-arm64 ./cmd/remotyy
 
 build-linux-amd64:
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN_DIR)/remotyy-host-linux-amd64 ./cmd/remotyy-host
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN_DIR)/remotyy-signal-linux-amd64 ./cmd/remotyy-signal
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN_DIR)/remotyy-linux-amd64 ./cmd/remotyy
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build $(GO_LDFLAGS) -o $(BIN_DIR)/remotyy-linux-amd64 ./cmd/remotyy
 
 build-darwin-arm64:
-	GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN_DIR)/remotyy-host-darwin-arm64 ./cmd/remotyy-host
-	GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN_DIR)/remotyy-signal-darwin-arm64 ./cmd/remotyy-signal
-	GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build $(LDFLAGS) -o $(BIN_DIR)/remotyy-darwin-arm64 ./cmd/remotyy
+	GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build $(GO_LDFLAGS) -o $(BIN_DIR)/remotyy-darwin-arm64 ./cmd/remotyy
 
-# ─── Development ───────────────────────────────────────────
-dev:
-	@echo "Starting remotyy-signal on :9000..."
-	go run ./cmd/remotyy-signal --port 9000 --dev
+build-darwin-amd64:
+	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build $(GO_LDFLAGS) -o $(BIN_DIR)/remotyy-darwin-amd64 ./cmd/remotyy
 
-quick-start: build-all
-	@echo ""
-	@echo "╔══════════════════════════════════════════╗"
-	@echo "║        remotyy Quick Start               ║"
-	@echo "╠══════════════════════════════════════════╣"
-	@echo "║  1. Start signaling:  ./remotyy signal   ║"
-	@echo "║  2. Start host:       ./remotyy host     ║"
-	@echo "║  3. Open web client:  cd web && npm run dev║"
-	@echo "║  4. CLI connect:      ./remotyy connect  ║"
-	@echo "╚══════════════════════════════════════════╝"
+build-all-platforms: build-linux-arm64 build-linux-amd64 build-darwin-arm64 build-darwin-amd64
 
-dev-host:
-	@echo "Starting remotyy-host (connects to localhost:9000)..."
-	go run ./cmd/remotyy-host --signal ws://localhost:9000 --name "dev-host"
+# ─── Web Client ───────────────────────────────────────────────
+build-web:
+	@echo "🌐 Building web client..."
+	cd web && npm ci && npm run build
+	@echo "✅ Web client built: web/dist/"
 
-# ─── Native Apps ──────────────────────────────────────────
-build-tauri:
-	@echo "Building Tauri desktop app..."
-	cd src-tauri && cargo build --release
+# ─── macOS Native App ─────────────────────────────────────────
+xcode-project:
+	@echo "🛠  Generating Xcode project..."
+	python3 scripts/gen-xcode-project.py
 
-build-macos-app:
-	@echo "Building macOS menu bar app..."
-	cd remotyy-macOS && swift build -c release
+build-macos-app: xcode-project
+	@echo "🖥  Building macOS .app..."
+	cd remotyy-macOS && xcodebuild -project remotyy.xcodeproj \
+		-scheme remotyy -configuration Release build \
+		-derivedDataPath build -quiet 2>/dev/null || \
+		xcodebuild -project remotyy.xcodeproj \
+		-scheme remotyy -configuration Release build \
+		-derivedDataPath build 2>&1 | tail -5
 
-build-ios-app:
-	@echo "Building iOS app..."
-	cd ios && xcodebuild -project remotyy.xcodeproj \
-		-scheme remotyy -configuration Release \
-		-derivedDataPath build \
-		CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO 2>/dev/null || echo "⚠️  Xcode build skipped"
-
-build-dmg:
-	@echo "📦 Building macOS .dmg..."
+build-dmg: build-macos-app
+	@echo "📦 Packaging macOS .dmg..."
 	bash scripts/build-dmg.sh
 
-build-native: build-tauri build-dmg
+# ─── Tauri Desktop ────────────────────────────────────────────
+build-tauri:
+	@echo "🦀 Building Tauri desktop app..."
+	cd src-tauri && cargo build --release 2>&1 | tail -5
 
-# ─── Quality ───────────────────────────────────────────────
+# ─── Release Packaging ────────────────────────────────────────
+release: build build-web build-all-platforms
+	@echo "📦 Packaging release artifacts..."
+	@mkdir -p dist
+	cp $(BIN_DIR)/remotyy dist/
+	cd web && tar czf ../dist/remotyy-web.tar.gz dist/
+	cd dist && for f in remotyy-*; do \
+		[ "$$f" = "remotyy-web.tar.gz" ] && continue; \
+		gzip -c "$$f" > "$$f.tar.gz"; \
+	done
+	@echo "✅ Release artifacts in dist/"
+	@ls -la dist/
+
+# ─── Development ──────────────────────────────────────────────
+dev:
+	@echo "Starting remotyy signal server on :9000..."
+	go run ./cmd/remotyy signal --dev
+
+dev-host:
+	@echo "Starting remotyy host..."
+	go run ./cmd/remotyy host --signal ws://localhost:9000
+
+dev-web:
+	cd web && npm run dev
+
+# ─── Quality ──────────────────────────────────────────────────
 test:
-	go test ./... -v -race -count=1
+	@echo "Running tests..."
+	go test ./... -v -count=1 -timeout=60s
 
 test-short:
-	go test ./... -short -race
+	go test ./... -short -race -count=1 -timeout=30s
 
 lint:
 	golangci-lint run ./...
@@ -101,7 +105,33 @@ lint:
 vet:
 	go vet ./...
 
-# ─── Clean ─────────────────────────────────────────────────
+# ─── Utility ──────────────────────────────────────────────────
 clean:
-	rm -rf $(BIN_DIR)
+	rm -rf $(BIN_DIR) dist/
 	go clean ./...
+	@echo "🧹 Cleaned"
+
+.PHONY: help
+help:
+	@echo "remotyy — remote terminal & screen access"
+	@echo ""
+	@echo "Build:"
+	@echo "  make build              Build CLI binary"
+	@echo "  make build-all-platforms Cross-compile for all platforms"
+	@echo "  make build-web          Build web client"
+	@echo "  make build-macos-app    Build macOS native app (requires Xcode)"
+	@echo "  make build-dmg          Build macOS .dmg (requires Xcode)"
+	@echo "  make build-tauri        Build Tauri desktop app (requires Rust)"
+	@echo ""
+	@echo "Development:"
+	@echo "  make dev       Start signaling server"
+	@echo "  make dev-host  Start host daemon"
+	@echo "  make dev-web   Start web dev server"
+	@echo ""
+	@echo "Quality:"
+	@echo "  make test      Run all tests"
+	@echo "  make lint      Run linter"
+	@echo ""
+	@echo "Release:"
+	@echo "  make release   Build all release artifacts"
+	@echo "  make clean     Clean build artifacts"
