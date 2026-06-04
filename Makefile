@@ -51,6 +51,17 @@ dev:
 	@echo "Starting remotyy-signal on :9000..."
 	go run ./cmd/remotyy-signal --port 9000 --dev
 
+quick-start: build-all
+	@echo ""
+	@echo "╔══════════════════════════════════════════╗"
+	@echo "║        remotyy Quick Start               ║"
+	@echo "╠══════════════════════════════════════════╣"
+	@echo "║  1. Start signaling:  ./remotyy signal   ║"
+	@echo "║  2. Start host:       ./remotyy host     ║"
+	@echo "║  3. Open web client:  cd web && npm run dev║"
+	@echo "║  4. CLI connect:      ./remotyy connect  ║"
+	@echo "╚══════════════════════════════════════════╝"
+
 dev-host:
 	@echo "Starting remotyy-host (connects to localhost:9000)..."
 	go run ./cmd/remotyy-host --signal ws://localhost:9000 --name "dev-host"
@@ -71,7 +82,11 @@ build-ios-app:
 		-derivedDataPath build \
 		CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO 2>/dev/null || echo "⚠️  Xcode build skipped"
 
-build-native: build-tauri build-macos-app
+build-dmg:
+	@echo "📦 Building macOS .dmg..."
+	bash scripts/build-dmg.sh
+
+build-native: build-tauri build-dmg
 
 # ─── Quality ───────────────────────────────────────────────
 test:

@@ -1,74 +1,58 @@
 # remotyy
 
-> **remote terminal, open source.**  
-> Cross-platform host daemon + web client + CLI for encrypted remote terminal access via WebRTC.
+> **Remote terminal & screen access via WebRTC**  
+> Cross-platform host daemon + web/CLI/native clients.  
+> Open-source alternative to Macky.
 
-remotyy, Macky'nin açık kaynak alternatifidir. Mac'inizin veya Linux sunucunuzun terminaline herhangi bir tarayıcıdan veya CLI'dan, güvenli ve şifreli bir WebRTC bağlantısıyla erişmenizi sağlar.
+remotyy gives you secure, encrypted remote access to any machine — your Mac, a Linux server, a Raspberry Pi, or a cloud VM — directly from your browser, terminal, or native app. No open ports, no VPN, no SSH key management.
 
-## Professional Features
-
-- **🔒 E2E Encrypted** — WebRTC DTLS-SRTP, end-to-end encrypted tunnel
-- **🌐 Cross-platform host** — macOS, Linux (ARM64, AMD64), any machine
-- **🖥 Web client** — Terminal in your browser via xterm.js (React)
-- **📟 CLI client** — Connect from terminal via `remotyy connect`
-- **🗄️ Config management** — YAML config file, env vars, CLI flags (viper)
-- **🔑 Dual-layer auth** — Signaling auth token + Master Password (bcrypt/argon2)
-- **📋 Device allow list** — Host explicitly approves devices
-- **🕶 Blind signaling** — Server coordinates handshake only, traffic never touches cloud
-- **🔄 Auto-reconnect** — Host reconnects to signaling server with backoff
-- **🚀 Self-hosted** — Run your own signaling server, zero third-party dependency
-- **📹 Screen sharing** — macOS (CGDisplay) + Linux (X11/PipeWire)
-- **📁 File transfer** — Chunked with SHA256 checksums, progress tracking, resume
-- **📝 Session recording** — Full terminal session capture and replay
-- **🔍 Audit logging** — Security event trail for all connections
-- **📊 REST API** — Health checks, host listing, stats
-- **🤖 Hermes integration** — Works with Hermes Agent on ARM (Oracle Cloud)
-- **♿ TUI client** — Bubble Tea terminal UI (coming soon)
+```
+                    ┌──────────────────┐
+                    │  Signaling Server│  (self-hosted or cloud)
+                    │  ws://host:9000  │
+                    └───────┬──────────┘
+                            │ WebSocket (blind relay)
+                  ┌─────────┴─────────┐
+                  ▼                   ▼
+          ┌──────────────┐   ┌──────────────────┐
+          │  Host Daemon  │   │  Client(s)        │
+          │  (target mac) │   │  Web / CLI / iOS  │
+          │  pty → shell  │   │  macOS / TUI      │
+          │  WebRTC P2P   │◄──┤  xterm.js/Term    │
+          │  DTLS-SRTP    │   │  WebRTC DataChan  │
+          └──────────────┘   └──────────────────┘
+```
 
 ## Features
 
 - **🔒 E2E Encrypted** — WebRTC DTLS-SRTP, end-to-end encrypted tunnel
-- **🌐 Cross-platform host** — macOS, Linux (ARM64, AMD64), any machine
+- **🌐 Cross-platform host** — macOS, Linux (ARM64/AMD64), Windows
 - **🖥 Web client** — Terminal in your browser via xterm.js
-- **📟 CLI client** — Connect from terminal (coming soon)
-- **🔑 Dual-layer auth** — Signaling auth + Master Password
-- **📋 Device allow list** — Host explicitly approves devices
-- **🕶 Blind signaling** — Server coordinates handshake only, traffic never touches cloud
-- **🔄 Auto-reconnect** — Host reconnects to signaling server with backoff
-- **🚀 Self-hosted** — Run your own signaling server, zero third-party dependency
-- **🤖 Hermes integration** — Works with Hermes Agent on ARM (Oracle Cloud)
-
-## Architecture
-
-```
-                    ┌──────────────────┐
-                    │  Signaling Server │  (Go — self-hosted)
-                    │  ws://host:9000   │
-                    └───────┬──────────┘
-                            │ WebSocket
-                  ┌─────────┴─────────┐
-                  ▼                   ▼
-          ┌──────────────┐   ┌──────────────────┐
-          │  Host Daemon │   │  Client           │
-          │  (Mac/Linux) │   │  (Web / CLI)      │
-          │              │   │                   │
-          │  pty → shell │   │  xterm.js/TUI     │
-          │  WebRTC      │◄──┤  WebRTC (P2P)     │
-          │  DTLS-SRTP   │   │  DataChannel      │
-          └──────────────┘   └──────────────────┘
-```
+- **📟 CLI client** — `remotyy connect` from any terminal
+- **📱 iOS app** — Native SwiftUI client (via Xcode)
+- **🖥 macOS app** — Menu bar host controller (via Xcode)
+- **🦀 Tauri desktop** — Cross-platform native wrapper (Rust)
+- **🗄️ Config management** — YAML + env vars + CLI flags
+- **🔑 Dual-layer auth** — Signaling token + Master Password (bcrypt)
+- **📋 Device allow list** — Explicitly approve devices
+- **🕶 Blind signaling** — Server coordinates handshake only
+- **📹 Screen sharing** — macOS + Linux (in progress)
+- **📁 File transfer** — Chunked with SHA256 checksums (in progress)
+- **📝 Session recording** — Full terminal capture & replay (in progress)
+- **📊 REST API** — Health checks, host listing, metrics
 
 ## Quick Start
 
 ### 1. Signaling Server
 
 ```bash
-# Run locally (dev mode)
+# Clone and build
+git clone https://github.com/remotyy/remotyy.git
 cd remotyy
-go run ./cmd/remotyy-signal --port 9000 --dev
+go build ./cmd/remotyy
 
-# Or with auth token
-REMOTYY_AUTH_TOKEN=mysecret go run ./cmd/remotyy-signal --port 9000
+# Start signaling server (dev mode)
+./remotyy signal --dev --port 9000
 ```
 
 ### 2. Host Daemon
@@ -76,213 +60,131 @@ REMOTYY_AUTH_TOKEN=mysecret go run ./cmd/remotyy-signal --port 9000
 On the machine you want to access remotely:
 
 ```bash
-# Start host (connects to signaling server)
-go run ./cmd/remotyy-host \
-  --signal ws://signaling-server-ip:9000 \
-  --name "my-mac"
-
-# With master password
-go run ./cmd/remotyy-host \
-  --signal ws://signaling-server-ip:9000 \
-  --name "my-server" \
-  --master-password "my-secret-pw"
+./remotyy host --signal ws://your-server:9000 --name "my-machine"
 ```
 
-### 3. Web Client
+With a master password (recommended):
 
 ```bash
-cd web
-npm install
-npm run dev
-# → opens http://localhost:3000
+./remotyy host --signal ws://your-server:9000 --name "my-machine" \
+  --master-password "your-secret-password"
 ```
 
-Enter the signaling server URL, click Connect, select a host, and you're in.
+### 3. Connect
 
-### 4. CLI Client
+**Web client:**
+```bash
+cd web && npm install && npm run dev
+# → http://localhost:3000
+```
 
+**CLI client:**
 ```bash
 # List available hosts
-go run ./cmd/remotyy ls --signal ws://localhost:9000
+./remotyy connect --signal ws://your-server:9000
 
 # Connect to a host
-go run ./cmd/remotyy connect <host-id> --signal ws://localhost:9000
+./remotyy connect host-id --signal ws://your-server:9000
 ```
 
-## Native Desktop Apps
+## Architecture
 
-remotyy provides native apps for all major platforms:
-
-### macOS Menu Bar App (SwiftUI)
-- Runs the host daemon with a native menu bar icon
-- Start/stop host with one click
-- Real-time session monitoring
-- Launch at login support
-- Settings panel for configuration
-
-```bash
-make build-macos-app
-# Binary: remotyy-macOS/.build/release/remotyy-macOS
 ```
-
-### iOS App (SwiftUI)
-- Connect to remotyy hosts from iPhone/iPad
-- Native terminal emulator
-- Host discovery via signaling server
-- Dark mode, native feel
-
-Open `ios/remotyy.xcodeproj` in Xcode and build.
-
-### Tauri Desktop (Cross-platform)
-- Wraps the web client as a native desktop app
-- System tray with menu
-- Native notifications
-- Works on macOS, Linux, Windows
-
-```bash
-make build-tauri
-# Binary: src-tauri/target/release/remotyy
+remotyy/
+├── cmd/remotyy/              # Main CLI (signal | host | connect)
+│   └── cmd/                  # Cobra subcommands
+├── internal/
+│   ├── auth/                 # bcrypt/argon2 password hashing
+│   ├── config/               # Viper config (YAML + env + flags)
+│   ├── host/                 # Host daemon, session management
+│   ├── client/               # Client library
+│   ├── signal/               # WebSocket signaling server
+│   ├── webrtc/               # pion/webrtc engine wrapper
+│   ├── pty/                  # PTY session manager
+│   ├── screen/               # Screen capture framework
+│   ├── transfer/             # File transfer protocol
+│   ├── mux/                  # Connection multiplexer
+│   ├── protocol/             # Wire protocol definitions
+│   └── logging/              # Structured logging + audit
+├── web/                      # React + TypeScript web client
+│   └── src/
+│       ├── components/       # Terminal, Screen, FileTransfer UI
+│       ├── hooks/            # useSignaling, useWebRTC
+│       └── lib/              # Protocol, WebRTC, Signaling clients
+├── ios/remotyy/              # Native iOS app (SwiftUI)
+├── remotyy-macOS/            # Native macOS menu bar app (SwiftUI)
+├── src-tauri/                # Tauri desktop wrapper (Rust)
+├── tui/                      # Bubble Tea TUI client (Go)
+├── deploy/                   # Docker, systemd, launchd configs
+├── docs/                     # Documentation
+├── .github/workflows/        # CI/CD
+├── Makefile
+└── remotyy.example.yaml
 ```
 
 ## Build
 
 ```bash
-# Build all binaries
-make build-all
+# Go binaries (cross-platform)
+make build-all                                    # Current platform
+make build-linux-arm64                            # ARM64 Linux
+make build-linux-amd64                            # AMD64 Linux
+make build-darwin-arm64                           # Apple Silicon
 
-# Cross-compile for specific platforms
-make build-linux-arm64    # ARM64 Linux (Oracle Cloud)
-make build-linux-amd64    # AMD64 Linux
-make build-darwin-arm64   # Apple Silicon Mac
+# Web client
+cd web && npm install && npm run build
+
+# Tauri desktop app
+make build-tauri                                  # Requires Rust
+
+# macOS menu bar app
+make build-macos-app                              # Requires Xcode
+
+# iOS app (open in Xcode)
+open ios/remotyy/
 ```
 
-Binaries will be in `bin/`.
+## Deployment Options
 
-## Project Structure
-
-```
-remotyy/
-├── cmd/
-│   ├── remotyy/           # CLI client (list/connect)
-│   ├── remotyy-host/      # Host daemon binary
-│   └── remotyy-signal/    # Signaling server binary
-├── internal/
-│   ├── auth/              # Password hashing (bcrypt)
-│   ├── config/            # Version info
-│   ├── host/              # Host daemon logic
-│   ├── protocol/          # Message types
-│   ├── pty/               # PTY sessions
-│   ├── signal/            # Signaling server
-│   └── webrtc/            # WebRTC engine (pion)
-├── web/                   # Web client (xterm.js)
-│   ├── index.html
-│   ├── style.css
-│   └── app.js
-├── docs/                  # Documentation
-├── deploy/                # Deployment configs
-│   ├── docker-compose.yml # Signaling server + web
-│   └── systemd/           # systemd service files
-├── Makefile
-└── README.md
-```
-
-## Deployment on ARM (Oracle Cloud)
-
-remotyy is designed to work seamlessly with your ARM Oracle Cloud instance:
-
-### Signaling Server on ARM
-
-```bash
-# Build for ARM
-make build-linux-arm64
-
-# Deploy to ARM
-scp bin/remotyy-signal-linux-arm64 arm-oracle:~/remotyy-signal
-scp deploy/remotyy-signal.service arm-oracle:
-
-# Install systemd service
-ssh arm-oracle
-sudo mv remotyy-signal.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now remotyy-signal
-```
-
-### Host Daemon on ARM
-
-```bash
-scp bin/remotyy-host-linux-arm64 arm-oracle:~/remotyy-host
-ssh arm-oracle
-./remotyy-host --signal ws://localhost:9000 --name "arm-oracle" \
-  --master-password "your-password"
-```
-
-### Hermes Integration
-
-remotyy includes a Hermes skill for agent-based remote terminal access:
-
-```bash
-# Hermes connects to ARM's remotyy host
-remotyy connect <arm-host-id> --signal ws://arm-oracle:9000
-```
-
-See [docs/hermes-integration.md](docs/hermes-integration.md) for details.
+- **Single machine:** Run signaling + host + web all on one machine
+- **VPS/Cloud:** Signaling on a public server, hosts connect from anywhere
+- **Local network:** No signaling server needed with Bonjour discovery
+- **Docker:** `docker compose up` for signaling + web
+- **systemd:** Production service files for Linux servers
 
 ## Security
 
 | Layer | Mechanism |
 |-------|-----------|
 | Transport | WebRTC DTLS-SRTP (E2E encrypted) |
-| Signaling | Optional bearer token auth |
-| Device auth | Host approve/reject per device ID |
+| Signaling | Optional bearer token authentication |
+| Device auth | Host must explicitly approve each device |
 | Terminal auth | Master Password (bcrypt, never leaves host) |
-| Data path | Blind signaling — server sees only handshake |
-| NAT traversal | STUN, ICE, no open ports required |
+| Data path | Blind signaling — server only coordinates handshake |
+| NAT traversal | STUN/ICE — no open ports required |
 
-## Comparison: remotyy vs Macky
+## Comparison
 
 | Feature | Macky ($29) | remotyy (free) |
 |---------|-------------|----------------|
-| Mac host | ✅ macOS 15+ | ✅ macOS (any) |
-| Linux host | ❌ | ✅ ARM64 + AMD64 |
-| Web client | ❌ (iOS only) | ✅ Any browser |
-| CLI client | ❌ | ✅ Terminal |
-| iOS client | ✅ App Store | ✅ Via web |
-| Self-hosted signal | ❌ | ✅ |
+| Host platform | macOS only | macOS, Linux, Windows |
+| Client platform | iOS only | Web, CLI, iOS, macOS, TUI |
+| Signaling | Proprietary cloud | Self-hosted or cloud |
+| File transfer | ❌ | ✅ (in progress) |
+| Port forwarding | ❌ | ✅ (planned) |
+| Clipboard sync | ❌ | ✅ (planned) |
+| Session recording | ❌ | ✅ (in progress) |
 | Open source | ❌ | ✅ MIT |
-| Hermes integration | ❌ | ✅ |
-| Screen sharing | ✅ | 🚧 (planned) |
-| Device allow list | ✅ | ✅ |
-| Master password | ✅ | ✅ |
-| Blind signaling | ✅ | ✅ |
+| Price | $29 lifetime | Free |
 
-## Roadmap
+## Contributing
 
-- [x] Signaling server (WebSocket, rooms, host registry)
-- [x] Host daemon (pty, WebRTC, auth)
-- [x] Web client (xterm.js terminal)
-- [x] CLI client (list/connect)
-- [x] Master password auth
-- [ ] Screen sharing (WebRTC video track)
-- [ ] iOS client (web app PWA)
-- [ ] File transfer (data channel)
-- [ ] End-to-end tests
-- [ ] Docker images
-- [ ] Hermes skill package
+Contributions welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
 
-## Development
-
-```bash
-# Run all tests
-make test
-
-# Dev mode (signaling in background)
-make dev &
-sleep 2
-make dev-host &
-
-# Open web client
-cd web && npm run dev
-```
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Open a pull request
 
 ## License
 
@@ -290,4 +192,4 @@ MIT — see [LICENSE](LICENSE)
 
 ---
 
-Built with ❤️ and [pion/webrtc](https://github.com/pion/webrtc) (Go) + [xterm.js](https://xtermjs.org/)
+Built with [pion/webrtc](https://github.com/pion/webrtc) (Go) + [xterm.js](https://xtermjs.org/) + [Tauri](https://tauri.app/)
