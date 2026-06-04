@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
@@ -171,6 +173,22 @@ func (c *Client) ConnectInteractive(ctx context.Context) error {
 		Rows: uint16(height),
 		Cols: uint16(width),
 	}))
+
+	// Watch for terminal resize (SIGWINCH) and notify host
+	sigwinch := make(chan os.Signal, 1)
+	signal.Notify(sigwinch, syscall.SIGWINCH)
+	go func() {
+		for range sigwinch {
+			w, h, err := term.GetSize(0)
+			if err != nil {
+				continue
+			}
+			terminalDC.SendJSON(protocol.NewMessage(protocol.MsgResize, protocol.ResizePayload{
+				Rows: uint16(h),
+				Cols: uint16(w),
+			}))
+		}
+	}()
 
 	// Read from terminal and send to WebRTC
 	go func() {

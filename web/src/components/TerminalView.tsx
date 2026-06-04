@@ -5,6 +5,7 @@ import { WebLinksAddon } from 'xterm-addon-web-links';
 import { useSignaling } from '../hooks/useSignaling';
 import { useWebRTC } from '../hooks/useWebRTC';
 import type { HostInfo } from '../lib/protocol';
+import type { ResizePayload } from '../lib/protocol';
 
 const TERMINAL_THEME = {
   background: '#0f0f0f',
@@ -90,7 +91,14 @@ export default function TerminalView({ host, signalUrl: _ }: Props) {
     });
 
     const observer = new ResizeObserver(() => {
-      try { fitAddon.fit(); } catch {}
+      try {
+        fitAddon.fit();
+        const dims = term.cols && term.rows ? { rows: term.rows, cols: term.cols } : null;
+        if (dims) {
+          const resizeMsg = JSON.stringify({ type: 'resize', payload: dims as ResizePayload });
+          webrtc.send('terminal', resizeMsg);
+        }
+      } catch {}
     });
     observer.observe(termRef.current);
 
