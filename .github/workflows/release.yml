@@ -60,7 +60,7 @@ jobs:
           path: dist/remotty-web.tar.gz
 
   build-macos-app:
-    name: Build macOS app bundle
+    name: Build, sign, notarize & DMG macOS app
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -84,23 +84,128 @@ jobs:
           cd remotty-macOS
           swift build -c release --product remotty
           cd ..
-          
-          # Create .app bundle
+      
+      - name: Create .app bundle
+        run: |
           APP_BUNDLE="dist/remotty.app"
           mkdir -p "$APP_BUNDLE/Contents/MacOS"
           mkdir -p "$APP_BUNDLE/Contents/Resources"
           
           cp remotty-macOS/.build/release/remotty "$APP_BUNDLE/Contents/MacOS/"
           cp remotty-macOS/Info.plist "$APP_BUNDLE/Contents/"
-          
-          # Bundle the Go binary inside the app's Resources
           cp dist/remotty "$APP_BUNDLE/Contents/Resources/remottyd"
+      
+      - name: Import Developer ID Application certificate
+        if: ${{ secrets.APPLE_CERTIFICATE != '' }}
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          # Create a temporary keychain
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           
-          # Package as .tar.gz (no code sign — ad-hoc)
+          # Import p12 certificate
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+          
+          # Add keychain to search list
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          security show-keychain-info "$KEYCHAIN_PATH"
+      
+      - name: Code sign .app bundle
+        if: ${{ secrets.APPLE_CERTIFICATE != '' }}
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # Get the signing identity from keychain
+          SIGNING_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
+          echo "Signing with identity: $SIGNING_IDENTITY"
+          
+          # Sign the embedded Go helper binary first
+          codesign --deep --force --verify --verbose --options=runtime \
+            --sign "$SIGNING_IDENTITY" \
+            "dist/remotty.app/Contents/Resources/remottyd"
+          
+          # Sign the main app bundle
+          codesign --deep --force --verify --verbose --options=runtime \
+            --sign "$SIGNING_IDENTITY" \
+            "dist/remotty.app"
+          
+          # Verify signatures
+          codesign -dvvv "dist/remotty.app"
+          codesign --verify --verbose "dist/remotty.app"
+      
+      - name: Create DMG
+        run: |
+          # Create a temporary staging directory
+          STAGING_DIR="$RUNNER_TEMP/dmg-staging"
+          mkdir -p "$STAGING_DIR"
+          
+          # Copy the signed .app into the staging dir
+          cp -R "dist/remotty.app" "$STAGING_DIR/"
+          
+          # Create the DMG with hdiutil
+          hdiutil create -volname "remotty" \
+            -srcfolder "$STAGING_DIR" \
+            -ov -format UDZO \
+            "dist/remotty.dmg" 2>&1 | tail -1
+          
+          echo "✅ DMG created: dist/remotty.dmg"
+          ls -lh dist/remotty.dmg
+      
+      - name: Notarize DMG with notarytool
+        if: ${{ secrets.APPLE_NOTARIZATION_KEY_ID != '' }}
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_NOTARIZATION_KEY_ID: ${{ secrets.APPLE_NOTARIZATION_KEY_ID }}
+          APPLE_NOTARIZATION_ISSUER_ID: ${{ secrets.APPLE_NOTARIZATION_ISSUER_ID }}
+          APPLE_NOTARIZATION_KEY: ${{ secrets.APPLE_NOTARIZATION_KEY }}
+        run: |
+          # Write the API key to a temp file
+          echo "$APPLE_NOTARIZATION_KEY" > "$RUNNER_TEMP/auth_key.p8"
+          
+          # Submit to notarytool
+          xcrun notarytool submit "dist/remotty.dmg" \
+            --key "$RUNNER_TEMP/auth_key.p8" \
+            --key-id "$APPLE_NOTARIZATION_KEY_ID" \
+            --issuer "$APPLE_NOTARIZATION_ISSUER_ID" \
+            --wait \
+            --output-format json 2>&1 | tee "$RUNNER_TEMP/notarization-result.json"
+      
+      - name: Staple notarization ticket
+        if: ${{ secrets.APPLE_NOTARIZATION_KEY_ID != '' }}
+        run: |
+          xcrun stapler staple "dist/remotty.dmg"
+          xcrun stapler validate "dist/remotty.dmg"
+      
+      - name: Notarize and staple fallback (stapler on .app)
+        if: ${{ secrets.APPLE_NOTARIZATION_KEY_ID != '' }}
+        run: |
+          # Also staple the .app itself (for direct distribution)
+          xcrun stapler staple "dist/remotty.app" || true
+          echo "✅ Notarization complete"
+      
+      - uses: actions/upload-artifact@v4
+        with:
+          name: remotty-macos-app
+          path: |
+            dist/remotty.dmg
+      
+      - name: Build unsigned tar.gz fallback
+        if: ${{ secrets.APPLE_CERTIFICATE == '' }}
+        run: |
           cd dist
           tar czf remotty-macos-app.tar.gz remotty.app
       
       - uses: actions/upload-artifact@v4
+        if: ${{ secrets.APPLE_CERTIFICATE == '' }}
         with:
           name: remotty-macos-app
           path: dist/remotty-macos-app.tar.gz
@@ -186,5 +291,6 @@ jobs:
         with:
           files: |
             *.tar.gz
+            *.dmg
           generate_release_notes: true
           make_latest: true

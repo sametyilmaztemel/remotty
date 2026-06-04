@@ -57,7 +57,7 @@ export interface FileRequestPayload {
 export interface FileChunkPayload {
   transfer_id: string;
   index: number;
-  data: number[];
+  data: string; // base64-encoded chunk bytes (matches Go's json:\"data\" for []byte)
   checksum?: string;
 }
 

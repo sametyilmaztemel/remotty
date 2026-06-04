@@ -8,9 +8,8 @@ let package = Package(
         .iOS(.v17),
     ],
     products: [
-        .library(
+        .executable(
             name: "remotty-ios",
-            type: .dynamic,
             targets: ["remotty-ios"]
         ),
     ],
@@ -19,12 +18,20 @@ let package = Package(
         .package(url: "https://github.com/webrtc-sdk/webrtc-ios", branch: "main"),
     ],
     targets: [
-        .target(
+        .executableTarget(
             name: "remotty-ios",
             dependencies: [
                 .product(name: "WebRTC", package: "webrtc-ios"),
             ],
             path: ".",
+            exclude: [
+                "Package.swift",
+                "Info.plist",
+                "ExportOptions.plist",
+                "Assets.xcassets",
+                "Tests",
+                ".build",
+            ],
             sources: [
                 "remottyApp.swift",
                 "ContentView.swift",
@@ -36,6 +43,25 @@ let package = Package(
             ],
             resources: [
                 .process("Assets.xcassets"),
+            ],
+            swiftSettings: [
+                .define("IOS"),
+                .unsafeFlags(["-O"]),
+            ],
+            linkerSettings: [
+                .linkedFramework("SwiftUI"),
+                .linkedFramework("UIKit"),
+                .linkedFramework("AVFoundation"),
+            ]
+        ),
+        .testTarget(
+            name: "remotty-ios-tests",
+            dependencies: ["remotty-ios"],
+            path: "Tests",
+            sources: [
+                "WebRTCServiceTests.swift",
+                "TouchHandlerTests.swift",
+                "TerminalViewTests.swift",
             ]
         ),
     ]
