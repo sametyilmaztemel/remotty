@@ -41,7 +41,8 @@ class HostManager: ObservableObject {
         process.executableURL = findRemotyyBinary()
         process.arguments = ["host", "--signal", signalURL, "--name", name]
         if !masterPassword.isEmpty {
-            process.arguments += ["--master-password", masterPassword]
+            process.arguments?.append("--master-password")
+            process.arguments?.append(masterPassword)
         }
         
         do {
