@@ -21,6 +21,27 @@ but never sees terminal or screen data.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := globalCfg.Signal
 
+		// CLI flags override config file
+		if v, _ := cmd.Flags().GetInt("port"); v != 0 {
+			cfg.Port = v
+		}
+		if v, _ := cmd.Flags().GetString("host"); v != "" {
+			cfg.Host = v
+		}
+		if v, _ := cmd.Flags().GetBool("dev"); v {
+			cfg.DevMode = v
+		}
+		if v, _ := cmd.Flags().GetBool("tls"); v {
+			cfg.TLS.Enabled = v
+		}
+		if v, _ := cmd.Flags().GetString("tls-cert"); v != "" {
+			cfg.TLS.CertFile = v
+		}
+		if v, _ := cmd.Flags().GetString("tls-key"); v != "" {
+			cfg.TLS.KeyFile = v
+		}
+
+		// Env overrides
 		if authToken := os.Getenv("REMOTYY_AUTH_TOKEN"); authToken != "" {
 			cfg.AuthToken = authToken
 		}
@@ -46,8 +67,8 @@ func init() {
 	rootCmd.AddCommand(signalCmd)
 	signalCmd.Flags().IntP("port", "p", 9000, "Signaling server port")
 	signalCmd.Flags().StringP("host", "H", "0.0.0.0", "Bind address")
-	signalCmd.Flags().Bool("dev", false, "Developer mode")
+	signalCmd.Flags().Bool("dev", false, "Developer mode (no auth)")
 	signalCmd.Flags().Bool("tls", false, "Enable TLS")
-	signalCmd.Flags().String("tls-cert", "", "TLS cert file")
+	signalCmd.Flags().String("tls-cert", "", "TLS certificate file")
 	signalCmd.Flags().String("tls-key", "", "TLS key file")
 }

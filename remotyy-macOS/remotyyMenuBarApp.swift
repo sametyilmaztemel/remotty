@@ -3,8 +3,6 @@ import OSLog
 
 let log = OSLog(subsystem: "com.remotyy.macos", category: "general")
 
-// MARK: - Application Entry Point
-
 @main
 struct remotyyApp: App {
     @StateObject private var host = HostManager()
@@ -21,8 +19,6 @@ struct remotyyApp: App {
     }
 }
 
-// MARK: - Host Manager
-
 @MainActor
 class HostManager: ObservableObject {
     @Published var isRunning = false
@@ -34,9 +30,9 @@ class HostManager: ObservableObject {
         didSet { UserDefaults.standard.set(hostName, forKey: "hostName") }
     }
     @Published var masterPassword: String = ""
-    @Published var sessionCount = 0
     
     private var hostProcess: Process?
+    private let outputQueue = DispatchQueue(label: "com.remotyy.output", qos: .background)
     
     init() {
         signalURL = UserDefaults.standard.string(forKey: "signalURL") ?? "ws://localhost:9000"
@@ -45,27 +41,25 @@ class HostManager: ObservableObject {
     
     func startHost() {
         if isRunning {
-            os_log("Host already running, ignoring start", log: log, type: .info)
+            statusMessage = "⚠️ Already running"
             return
         }
         
         let name = hostName.trimmingCharacters(in: .whitespaces)
         let url = signalURL.trimmingCharacters(in: .whitespaces)
-        let binary = findBinary()
         
-        if url.isEmpty || name.isEmpty {
+        guard !url.isEmpty, !name.isEmpty else {
             statusMessage = "❌ Signal URL and hostname required"
-            os_log("Missing configuration: url=%{public}s name=%{public}s", log: log, type: .error, url, name)
             return
         }
         
-        guard let binaryPath = binary else {
+        guard let binaryPath = findBinary() else {
             statusMessage = "❌ remotyy binary not found"
             os_log("Binary not found", log: log, type: .error)
             return
         }
         
-        os_log("Starting host: %{public}s url=%{public}s name=%{public}s",
+        os_log("Starting host: %{public}s --signal %{public}s --name %{public}s",
                log: log, type: .info, binaryPath, url, name)
         
         let process = Process()
@@ -75,20 +69,52 @@ class HostManager: ObservableObject {
             process.arguments?.append("--master-password")
             process.arguments?.append(masterPassword)
         }
+        process.currentDirectoryURL = URL(fileURLWithPath: NSHomeDirectory())
         
-        // Capture output for logging
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
+        // Set up pipes for stdout/stderr (read async on background queue)
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        process.standardOutput = outPipe
+        process.standardError = errPipe
         
-        process.terminationHandler = { proc in
-            DispatchQueue.main.async { [weak self] in
+        // Read stdout asynchronously
+        outPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            if data.count > 0, let output = String(data: data, encoding: .utf8) {
+                os_log("host: %{public}s", log: log, type: .debug, output)
+            }
+        }
+        
+        // Read stderr asynchronously (errors from host)
+        errPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if data.count > 0, let output = String(data: data, encoding: .utf8) {
+                os_log("host error: %{public}s", log: log, type: .error, output)
+            }
+        }
+        
+        // Handle process exit
+        process.terminationHandler = { [weak self] proc in
+            // Clean up readability handlers
+            outPipe.fileHandleForReading.readabilityHandler = nil
+            errPipe.fileHandleForReading.readabilityHandler = nil
+            
+            DispatchQueue.main.async {
                 guard let self = self else { return }
                 self.isRunning = false
-                self.sessionCount = 0
+                self.hostProcess = nil
                 let status = proc.terminationStatus
-                self.statusMessage = status == 0 ? "⏹ Stopped" : "🛑 Crashed (exit: \(status))"
-                os_log("Host exited: %d", log: log, type: .info, status)
+                if status == 0 {
+                    self.statusMessage = "⏹ Stopped"
+                } else {
+                    self.statusMessage = "🛑 Crashed (exit: \(status))"
+                    // Try to read any remaining output
+                    let remainingOut = String(data: outPipe.fileHandleForReading.availableData, encoding: .utf8) ?? ""
+                    let remainingErr = String(data: errPipe.fileHandleForReading.availableData, encoding: .utf8) ?? ""
+                    os_log("Host crashed. stdout: %{public}s stderr: %{public}s",
+                           log: log, type: .error, remainingOut, remainingErr)
+                }
+                os_log("Host exited with status %d", log: log, type: .info, status)
             }
         }
         
@@ -97,18 +123,10 @@ class HostManager: ObservableObject {
             hostProcess = process
             isRunning = true
             statusMessage = "✅ Running on \(name)"
-            os_log("Host started with PID: %d", log: log, type: .info, process.processIdentifier)
-            
-            // Read output asynchronously
-            Task {
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let output = String(data: data, encoding: .utf8), !output.isEmpty {
-                    os_log("Host output: %{public}s", log: log, type: .debug, output)
-                }
-            }
+            os_log("Host PID: %d", log: log, type: .info, process.processIdentifier)
         } catch {
             statusMessage = "❌ Failed: \(error.localizedDescription)"
-            os_log("Start failed: %{public}s", log: log, type: .error, error.localizedDescription)
+            os_log("Failed to start: %{public}s", log: log, type: .error, error.localizedDescription)
         }
     }
     
@@ -116,26 +134,41 @@ class HostManager: ObservableObject {
         guard let process = hostProcess, isRunning else { return }
         os_log("Stopping host PID %d", log: log, type: .info, process.processIdentifier)
         process.terminate()
+        // Give it 3 seconds to terminate gracefully, then kill
+        DispatchQueue.global().asyncAfter(deadline: .now() + 3) { [weak self] in
+            guard let self = self, let proc = self.hostProcess, proc.isRunning else { return }
+            os_log("Force killing host PID %d", log: log, type: .error, proc.processIdentifier)
+            proc.terminate()
+        }
         hostProcess = nil
         isRunning = false
         statusMessage = "⏹ Stopped"
     }
     
     private func findBinary() -> String? {
-        let candidates: [String?] = [
-            Bundle.main.path(forResource: "remotyyd", ofType: nil),
-            Bundle.main.path(forResource: "remotyy", ofType: nil),
-            "/usr/local/bin/remotyy",
-            "/opt/homebrew/bin/remotyy",
-            "\(NSHomeDirectory())/.local/bin/remotyy",
-            "\(NSHomeDirectory())/projects/remotyy/bin/remotyy",
-            "\(NSHomeDirectory())/Projects/remotyy/bin/remotyy",
-        ]
-        
-        for path in candidates {
-            if let p = path, FileManager.default.fileExists(atPath: p) {
-                os_log("Found binary: %{public}s", log: log, type: .debug, p)
-                return p
+        // Use Bundle first (bundled inside .app)
+        if let bundled = Bundle.main.path(forResource: "remotyyd", ofType: nil) {
+            if FileManager.default.fileExists(atPath: bundled) {
+                return bundled
+            }
+        }
+        if let bundled = Bundle.main.path(forResource: "remotyy", ofType: nil) {
+            if FileManager.default.fileExists(atPath: bundled) {
+                return bundled
+            }
+        }
+        // Fallback to PATH
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        task.arguments = ["remotyy"]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        try? task.run()
+        task.waitUntilExit()
+        if task.terminationStatus == 0 {
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty {
+                return path
             }
         }
         return nil

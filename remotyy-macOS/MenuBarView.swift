@@ -35,9 +35,6 @@ struct MenuBarView: View {
                             .fontDesign(.monospaced)
                             .foregroundColor(.secondary)
                     }
-                    LabeledContent("Sessions") {
-                        Text("\(host.sessionCount)")
-                    }
                 }
             }
             .padding()

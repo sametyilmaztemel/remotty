@@ -21,13 +21,23 @@ If no host ID is given, lists available hosts.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := globalCfg.Client
 
-		if env := os.Getenv("REMOTYY_SIGNAL_URL"); env != "" {
+		// CLI flags override config file
+		if v, _ := cmd.Flags().GetString("signal"); v != "" {
+			cfg.SignalURL = v
+		}
+		if v, _ := cmd.Flags().GetString("password"); v != "" {
+			cfg.MasterPassword = v
+		}
+
+		// Env overrides
+		if env := os.Getenv("REMOTYY_SIGNAL_URL"); env != "" && cfg.SignalURL == "" {
 			cfg.SignalURL = env
 		}
 		if env := os.Getenv("REMOTYY_MASTER_PASSWORD"); env != "" && cfg.MasterPassword == "" {
 			cfg.MasterPassword = env
 		}
 
+		// Positional arg = host ID
 		if len(args) > 0 {
 			cfg.HostID = args[0]
 		}
@@ -37,7 +47,7 @@ If no host ID is given, lists available hosts.`,
 			return err
 		}
 
-		// List mode
+		// List mode (no host specified)
 		if cfg.HostID == "" {
 			hosts, err := c.ListHosts()
 			if err != nil {

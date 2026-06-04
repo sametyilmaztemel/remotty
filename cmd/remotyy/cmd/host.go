@@ -20,7 +20,21 @@ Connects to signaling server and waits for client connections.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg := globalCfg.Host
 
-		if env := os.Getenv("REMOTYY_SIGNAL_URL"); env != "" {
+		// CLI flags override config file
+		signalFlag, _ := cmd.Flags().GetString("signal")
+		nameFlag, _ := cmd.Flags().GetString("name")
+		if signalFlag != "" {
+			cfg.SignalURL = signalFlag
+		}
+		if nameFlag != "" {
+			cfg.Name = nameFlag
+		}
+		if v, _ := cmd.Flags().GetString("master-password"); v != "" {
+			cfg.MasterPassword = v
+		}
+
+		// Env overrides (lowest priority)
+		if env := os.Getenv("REMOTYY_SIGNAL_URL"); env != "" && cfg.SignalURL == "" {
 			cfg.SignalURL = env
 		}
 		if env := os.Getenv("REMOTYY_MASTER_PASSWORD"); env != "" && cfg.MasterPassword == "" {
