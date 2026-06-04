@@ -67,10 +67,29 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  ios-check:
+    name: iOS Build Check
+    runs-on: macos-14
+    continue-on-error: true
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve Swift packages
+        run: |
+          cd ios/remotty
+          swift package resolve 2>&1 || true
+      - name: Build check (simulator)
+        run: |
+          cd ios/remotty
+          swift build -c debug \
+            -Xswiftc "-sdk" -Xswiftc "$(xcrun --sdk iphonesimulator --show-sdk-path 2>/dev/null || echo /dev/null)" \
+            -Xswiftc "-target" -Xswiftc "arm64-apple-ios17.0-simulator" \
+            2>&1 | tail -20 || echo "⚠️ iOS build check non-fatal"
+
   release:
     name: Release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [test, lint, web]
+    needs: [test, lint, web, ios-check]
     runs-on: ubuntu-latest
 
     steps:
