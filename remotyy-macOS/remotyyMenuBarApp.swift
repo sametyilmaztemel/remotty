@@ -21,7 +21,7 @@ struct remotyyApp: App {
         Settings {
             SettingsView()
                 .environmentObject(host)
-                .frame(width: 420, height: 320)
+                .frame(minWidth: 420, minHeight: 300)
         }
     }
 }
@@ -30,13 +30,13 @@ struct remotyyApp: App {
 class HostManager: ObservableObject {
     @Published var isRunning = false
     @Published var statusMessage = "Ready"
-    @Published var signalURL = UserDefaults.standard.string(forKey: "signalURL") ?? "ws://localhost:9000" {
+    @Published var signalURL: String {
         didSet { UserDefaults.standard.set(signalURL, forKey: "signalURL") }
     }
-    @Published var hostName = UserDefaults.standard.string(forKey: "hostName") ?? ProcessInfo.processInfo.hostName {
+    @Published var hostName: String {
         didSet { UserDefaults.standard.set(hostName, forKey: "hostName") }
     }
-    @Published var masterPassword = ""
+    @Published var masterPassword: String = ""
     @Published var launchAtLogin: Bool {
         didSet { updateLaunchAtLogin() }
     }
@@ -45,23 +45,20 @@ class HostManager: ObservableObject {
     private var healthTimer: Timer?
     
     init() {
+        signalURL = UserDefaults.standard.string(forKey: "signalURL") ?? "ws://localhost:9000"
+        hostName = UserDefaults.standard.string(forKey: "hostName") ?? ProcessInfo.processInfo.hostName
         launchAtLogin = (try? SMAppService.mainApp.status == .enabled) ?? false
     }
     
     func startHost() {
         guard !isRunning else { return }
         
-        let name = hostName.trimmingCharacters(in: .whitespaces).nonEmpty ?? ProcessInfo.processInfo.hostName
-        let url = signalURL.trimmingCharacters(in: .whitespaces)
+        let name = hostName.trimmed == "" ? ProcessInfo.processInfo.hostName : hostName.trimmed
+        let url = signalURL.trimmed
         
-        guard !url.isEmpty else {
-            statusMessage = "Signal URL is required"
-            return
-        }
+        guard !url.isEmpty else { statusMessage = "Signal URL is required"; return }
         guard let binary = findBinary() else {
-            statusMessage = "remotyy binary not found"
-            os_log("Binary not found", log: Log, type: .error)
-            return
+            statusMessage = "Binary not found"; return
         }
         
         let process = Process()
@@ -73,18 +70,18 @@ class HostManager: ObservableObject {
         }
         process.currentDirectoryURL = URL(fileURLWithPath: NSHomeDirectory())
         
-        let outPipe = Pipe()
-        process.standardOutput = outPipe
-        outPipe.fileHandleForReading.readabilityHandler = { h in
+        let stdOut = Pipe()
+        process.standardOutput = stdOut
+        stdOut.fileHandleForReading.readabilityHandler = { h in
             let d = h.availableData
             if d.count > 0, let s = String(data: d, encoding: .utf8) {
                 os_log("%{public}s", log: Log, type: .debug, s.trimmingCharacters(in: .whitespacesAndNewlines))
             }
         }
         
-        let errPipe = Pipe()
-        process.standardError = errPipe
-        errPipe.fileHandleForReading.readabilityHandler = { h in
+        let stdErr = Pipe()
+        process.standardError = stdErr
+        stdErr.fileHandleForReading.readabilityHandler = { h in
             let d = h.availableData
             if d.count > 0, let s = String(data: d, encoding: .utf8) {
                 os_log("stderr: %{public}s", log: Log, type: .error, s.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -92,19 +89,15 @@ class HostManager: ObservableObject {
         }
         
         process.terminationHandler = { [weak self] proc in
-            outPipe.fileHandleForReading.readabilityHandler = nil
-            errPipe.fileHandleForReading.readabilityHandler = nil
+            stdOut.fileHandleForReading.readabilityHandler = nil
+            stdErr.fileHandleForReading.readabilityHandler = nil
             DispatchQueue.main.async {
                 self?.isRunning = false
                 self?.hostProcess = nil
                 self?.healthTimer?.invalidate()
                 self?.healthTimer = nil
-                let status = proc.terminationStatus
-                self?.statusMessage = status == 0 ? "Stopped" : "Crashed (exit \(status))"
-                if status != 0 {
-                    let err = String(data: errPipe.fileHandleForReading.availableData, encoding: .utf8) ?? ""
-                    os_log("Crash: %{public}s", log: Log, type: .error, err)
-                }
+                let st = proc.terminationStatus
+                self?.statusMessage = st == 0 ? "Stopped" : "Crashed (exit \(st))"
             }
         }
         
@@ -113,13 +106,9 @@ class HostManager: ObservableObject {
             hostProcess = process
             isRunning = true
             statusMessage = "Running — \(name)"
-            
             healthTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-                guard let self = self, let proc = self.hostProcess, !proc.isRunning else { return }
-                Task { @MainActor in
-                    self.isRunning = false
-                    self.statusMessage = "Process ended"
-                }
+                guard let self = self, let p = self.hostProcess, !p.isRunning else { return }
+                Task { @MainActor in self.isRunning = false; self.statusMessage = "Process ended" }
             }
         } catch {
             statusMessage = "Failed: \(error.localizedDescription)"
@@ -127,8 +116,8 @@ class HostManager: ObservableObject {
     }
     
     func stopHost() {
-        guard let proc = hostProcess, isRunning else { return }
-        proc.terminate()
+        guard let p = hostProcess, isRunning else { return }
+        p.terminate()
         DispatchQueue.global().asyncAfter(deadline: .now() + 3) { [weak self] in
             guard let self = self, let p = self.hostProcess, p.isRunning else { return }
             kill(p.processIdentifier, SIGKILL)
@@ -141,12 +130,7 @@ class HostManager: ObservableObject {
     }
     
     private func findBinary() -> String? {
-        if let p = Bundle.main.path(forResource: "remotyyd", ofType: nil), FileManager.default.fileExists(atPath: p) {
-            return p
-        }
-        if let p = Bundle.main.path(forResource: "remotyy", ofType: nil), FileManager.default.fileExists(atPath: p) {
-            return p
-        }
+        if let p = Bundle.main.path(forResource: "remotyyd", ofType: nil) { return p }
         let t = Process()
         t.executableURL = URL(fileURLWithPath: "/usr/bin/which")
         t.arguments = ["remotyy"]
@@ -155,30 +139,25 @@ class HostManager: ObservableObject {
         try? t.run()
         t.waitUntilExit()
         if t.terminationStatus == 0 {
-            let s = (try? p.fileHandleForReading.readToEnd()).flatMap { String(data: $0, encoding: .utf8) }?
+            return (try? p.fileHandleForReading.readToEnd()).flatMap { String(data: $0, encoding: .utf8) }?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            if let s = s, !s.isEmpty { return s }
         }
-        // Hardcoded fallbacks
-        for path in ["/usr/local/bin/remotyy", "/opt/homebrew/bin/remotyy"] {
-            if FileManager.default.fileExists(atPath: path) { return path }
+        return ["/usr/local/bin/remotyy", "/opt/homebrew/bin/remotyy"].first {
+            FileManager.default.fileExists(atPath: $0)
         }
-        return nil
     }
     
     private func updateLaunchAtLogin() {
+        let log = Log
         do {
-            if launchAtLogin {
-                try SMAppService.mainApp.register()
-            } else {
-                try SMAppService.mainApp.unregister()
-            }
+            if launchAtLogin { try SMAppService.mainApp.register() }
+            else { try SMAppService.mainApp.unregister() }
         } catch {
-            os_log("SMAppService: %{public}s", log: Log, type: .error, error.localizedDescription)
+            os_log("SMAppService: %{public}s", log: log, type: .error, error.localizedDescription)
         }
     }
 }
 
 private extension String {
-    var nonEmpty: String? { isEmpty ? nil : self }
+    var trimmed: String { trimmingCharacters(in: .whitespaces) }
 }

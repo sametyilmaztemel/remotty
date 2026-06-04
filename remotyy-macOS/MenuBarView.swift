@@ -6,57 +6,53 @@ struct MenuBarView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            HeaderView(isRunning: host.isRunning, hostname: host.hostName)
-            
+            HeaderView(host: host)
             Divider()
-            
             StatusSection(host: host)
-            
             Divider()
-            
-            ActionButtons(
-                isRunning: host.isRunning,
-                onStart: host.startHost,
-                onStop: host.stopHost,
-                onSettings: { showSettings = true }
-            )
+            ActionButtons(host: host, showSettings: $showSettings)
         }
-        .frame(width: 300)
+        .frame(width: 280)
         .sheet(isPresented: $showSettings) {
             SettingsView()
                 .environmentObject(host)
-                .frame(minWidth: 420, minHeight: 300)
         }
     }
 }
 
-// MARK: - Components
+// MARK: - Header
 
 private struct HeaderView: View {
-    let isRunning: Bool
-    let hostname: String
+    @ObservedObject var host: HostManager
     
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "terminal.fill")
-                .font(.title3)
-                .foregroundColor(isRunning ? .green : .secondary)
+            ZStack {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(host.isRunning ? Color.green.opacity(0.15) : Color.gray.opacity(0.1))
+                    .frame(width: 32, height: 32)
+                Image(systemName: "terminal.fill")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(host.isRunning ? .green : .secondary)
+            }
             
             VStack(alignment: .leading, spacing: 1) {
                 Text("remotyy")
-                    .font(.headline)
+                    .font(.system(size: 13, weight: .semibold))
                     .fontDesign(.monospaced)
-                Text(isRunning ? hostname : "Not connected")
-                    .font(.caption)
+                
+                Text(host.isRunning ? host.hostName : "Not connected")
+                    .font(.system(size: 10))
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
             }
             
             Spacer()
             
-            StatusBadge(isRunning: isRunning)
+            StatusBadge(isRunning: host.isRunning)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 }
 
@@ -64,88 +60,94 @@ private struct StatusBadge: View {
     let isRunning: Bool
     
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             Circle()
                 .fill(isRunning ? Color.green : Color.gray)
-                .frame(width: 7, height: 7)
+                .frame(width: 6, height: 6)
             Text(isRunning ? "Online" : "Idle")
-                .font(.caption2)
+                .font(.system(size: 10))
                 .foregroundColor(.secondary)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
         .background((isRunning ? Color.green : Color.gray).opacity(0.1))
-        .cornerRadius(4)
+        .cornerRadius(3)
     }
 }
+
+// MARK: - Status
 
 private struct StatusSection: View {
     @ObservedObject var host: HostManager
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            LabeledContent("Status") {
-                Text(host.statusMessage)
-                    .font(.caption.monospaced())
-                    .foregroundColor(statusColor)
-            }
+        VStack(spacing: 0) {
+            StatusRow(label: "Status", value: host.statusMessage,
+                      color: host.isRunning ? .green : host.statusMessage.contains("Failed") ? .red : .secondary)
             
             if host.isRunning {
-                LabeledContent("Hostname") {
-                    Text(host.hostName)
-                        .font(.caption.monospaced())
-                }
-                LabeledContent("Signal") {
-                    Text(host.signalURL)
-                        .font(.caption.monospaced())
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
+                Divider().padding(.leading, 80)
+                StatusRow(label: "Hostname", value: host.hostName.isEmpty ? ProcessInfo.processInfo.hostName : host.hostName)
+                Divider().padding(.leading, 80)
+                StatusRow(label: "Signal", value: host.signalURL)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-    }
-    
-    private var statusColor: Color {
-        if host.statusMessage.contains("Failed") || host.statusMessage.contains("Crashed") {
-            return .red
-        } else if host.isRunning {
-            return .green
-        }
-        return .secondary
+        .padding(.vertical, 8)
     }
 }
 
+private struct StatusRow: View {
+    let label: String
+    let value: String
+    var color: Color = .secondary
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+                .frame(width: 60, alignment: .trailing)
+            
+            Text(value)
+                .font(.system(size: 11).monospaced())
+                .foregroundColor(color)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 5)
+    }
+}
+
+// MARK: - Actions
+
 private struct ActionButtons: View {
-    let isRunning: Bool
-    let onStart: () -> Void
-    let onStop: () -> Void
-    let onSettings: () -> Void
+    @ObservedObject var host: HostManager
+    @Binding var showSettings: Bool
     
     var body: some View {
         VStack(spacing: 6) {
-            if isRunning {
-                Button(action: onStop) {
+            if host.isRunning {
+                Button(role: .destructive, action: host.stopHost) {
                     Label("Stop Host", systemImage: "stop.fill")
                         .frame(maxWidth: .infinity)
-                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.red)
                 .controlSize(.large)
             } else {
-                Button(action: onStart) {
+                Button(action: host.startHost) {
                     Label("Start Host", systemImage: "play.fill")
                         .frame(maxWidth: .infinity)
-                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
             }
             
             HStack(spacing: 6) {
-                Button(action: onSettings) {
+                Button(action: { showSettings = true }) {
                     Label("Settings", systemImage: "gearshape")
                         .frame(maxWidth: .infinity)
                 }
@@ -158,8 +160,7 @@ private struct ActionButtons: View {
                 .buttonStyle(.bordered)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .controlSize(.regular)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 }

@@ -2,10 +2,33 @@ import { useEffect, useRef, useState } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
-import { SearchAddon } from 'xterm-addon-search';
 import { useSignaling } from '../hooks/useSignaling';
 import { useWebRTC } from '../hooks/useWebRTC';
-import type { HostInfo, Message } from '../lib/protocol';
+import type { HostInfo } from '../lib/protocol';
+
+const TERMINAL_THEME = {
+  background: '#0f0f0f',
+  foreground: '#c6c6c6',
+  cursor: '#8b5cf6',
+  cursorAccent: '#ffffff',
+  selectionBackground: 'rgba(139, 92, 246, 0.25)',
+  black: '#1a1a1a',
+  red: '#e5484d',
+  green: '#30a46c',
+  yellow: '#f5a623',
+  blue: '#6b8cff',
+  magenta: '#c084fc',
+  cyan: '#22d3ee',
+  white: '#d4d4d4',
+  brightBlack: '#404040',
+  brightRed: '#ef4444',
+  brightGreen: '#22c55e',
+  brightYellow: '#facc15',
+  brightBlue: '#60a5fa',
+  brightMagenta: '#d8b4fe',
+  brightCyan: '#67e8f9',
+  brightWhite: '#ffffff',
+};
 
 interface Props {
   host: HostInfo;
@@ -19,7 +42,6 @@ export default function TerminalView({ host, signalUrl: _ }: Props) {
   const fitRef = useRef<FitAddon | null>(null);
   const [status, setStatus] = useState('connecting...');
 
-  // Initialize WebRTC
   const webrtc = useWebRTC({
     signal: client!,
     room: `term-${host.id}-${Date.now()}`,
@@ -42,38 +64,19 @@ export default function TerminalView({ host, signalUrl: _ }: Props) {
     const term = new Terminal({
       cursorBlink: true,
       cursorStyle: 'block',
-      fontSize: 14,
+      fontSize: 13,
       fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-      allowTransparency: true,
-      theme: {
-        background: '#0a0a0a',
-        foreground: '#a3a3a3',
-        cursor: '#8b5cf6',
-        cursorAccent: '#000000',
-        selectionBackground: 'rgba(139, 92, 246, 0.3)',
-        black: '#000000',
-        red: '#ef4444',
-        green: '#22c55e',
-        yellow: '#eab308',
-        blue: '#3b82f6',
-        magenta: '#a855f7',
-        cyan: '#06b6d4',
-        white: '#e0e0e0',
-        brightBlack: '#555555',
-        brightRed: '#ef4444',
-        brightGreen: '#22c55e',
-        brightYellow: '#eab308',
-        brightBlue: '#60a5fa',
-        brightMagenta: '#c084fc',
-        brightCyan: '#22d3ee',
-        brightWhite: '#ffffff',
-      },
+      lineHeight: 1.35,
+      letterSpacing: 0,
+      theme: TERMINAL_THEME,
+      allowTransparency: false,
+      scrollback: 5000,
+      smoothScrollDuration: 0,
     });
 
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.loadAddon(new WebLinksAddon());
-    term.loadAddon(new SearchAddon());
 
     term.open(termRef.current);
     fitAddon.fit();
@@ -82,18 +85,15 @@ export default function TerminalView({ host, signalUrl: _ }: Props) {
     terminalRef.current = term;
     fitRef.current = fitAddon;
 
-    // Handle terminal input
     term.onData((data) => {
       webrtc.send('terminal', data);
     });
 
-    // Handle resize
     const observer = new ResizeObserver(() => {
       try { fitAddon.fit(); } catch {}
     });
     observer.observe(termRef.current);
 
-    // Init WebRTC
     webrtc.init(true);
 
     return () => {
@@ -108,11 +108,12 @@ export default function TerminalView({ host, signalUrl: _ }: Props) {
       <div className="terminal-header">
         <div className="terminal-title">
           <span className="status-indicator small online" />
-          {host.name} — {status}
+          {host.name}
+          <span className="terminal-subtitle">{status}</span>
         </div>
         <div className="terminal-controls">
           <button className="btn-small" onClick={() => fitRef.current?.fit()}>
-            ⊞ Fit
+            Fit
           </button>
           <button className="btn-small" onClick={() => terminalRef.current?.clear()}>
             Clear
