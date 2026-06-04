@@ -11,7 +11,7 @@ let package = Package(
         .executableTarget(
             name: "remotyy",
             path: ".",
-            exclude: ["Info.plist"],
+            exclude: ["Info.plist", "build", "remotyy.xcodeproj"],
             sources: [
                 "main.swift",
                 "AppDelegate.swift",

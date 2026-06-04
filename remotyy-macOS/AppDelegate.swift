@@ -1,7 +1,7 @@
 import AppKit
 
-// MainActor isolation handled by AppDelegate
-// applicationDidFinishLaunching runs on the main thread
+// MARK: - AppDelegate
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var host: HostManager!
@@ -9,14 +9,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWC: NSWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // MUST set activation policy FIRST
+        NSApp.setActivationPolicy(.accessory)
+
         // Initialize on main thread via applicationDidFinishLaunching
         host = HostManager()
-        
-        NSApp.setActivationPolicy(.accessory)
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         buildMenu()
         updateIcon()
+        
+        // Auto-start host daemon
+        host.startHost()
     }
 
     // MARK: - Icon
