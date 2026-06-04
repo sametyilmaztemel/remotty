@@ -2,9 +2,7 @@ import SwiftUI
 import OSLog
 import ServiceManagement
 
-let log = OSLog(subsystem: "com.remotyy.macos", category: "general")
-
-// MARK: - Application Entry Point
+let Log = OSLog(subsystem: "com.remotyy.macos", category: "general")
 
 @main
 struct remotyyApp: App {
@@ -16,31 +14,30 @@ struct remotyyApp: App {
                 .environmentObject(host)
         } label: {
             Image(systemName: host.isRunning ? "terminal.fill" : "terminal")
-                .foregroundColor(host.isRunning ? .green : .gray)
+                .foregroundColor(host.isRunning ? .green : .secondary)
         }
         .menuBarExtraStyle(.window)
         
         Settings {
             SettingsView()
                 .environmentObject(host)
+                .frame(width: 420, height: 320)
         }
     }
 }
-
-// MARK: - Host Manager
 
 @MainActor
 class HostManager: ObservableObject {
     @Published var isRunning = false
     @Published var statusMessage = "Ready"
-    @Published var signalURL: String {
+    @Published var signalURL = UserDefaults.standard.string(forKey: "signalURL") ?? "ws://localhost:9000" {
         didSet { UserDefaults.standard.set(signalURL, forKey: "signalURL") }
     }
-    @Published var hostName: String {
+    @Published var hostName = UserDefaults.standard.string(forKey: "hostName") ?? ProcessInfo.processInfo.hostName {
         didSet { UserDefaults.standard.set(hostName, forKey: "hostName") }
     }
-    @Published var masterPassword: String = ""
-    @Published var launchAtLogin: Bool = false {
+    @Published var masterPassword = ""
+    @Published var launchAtLogin: Bool {
         didSet { updateLaunchAtLogin() }
     }
     
@@ -48,36 +45,27 @@ class HostManager: ObservableObject {
     private var healthTimer: Timer?
     
     init() {
-        signalURL = UserDefaults.standard.string(forKey: "signalURL") ?? "ws://localhost:9000"
-        hostName = UserDefaults.standard.string(forKey: "hostName") ?? ProcessInfo.processInfo.hostName
-        launchAtLogin = SMAppService.mainApp.status == .enabled
+        launchAtLogin = (try? SMAppService.mainApp.status == .enabled) ?? false
     }
     
     func startHost() {
-        if isRunning {
-            statusMessage = "Already running"
-            return
-        }
+        guard !isRunning else { return }
         
-        let name = hostName.trimmingCharacters(in: .whitespaces)
+        let name = hostName.trimmingCharacters(in: .whitespaces).nonEmpty ?? ProcessInfo.processInfo.hostName
         let url = signalURL.trimmingCharacters(in: .whitespaces)
         
-        guard !url.isEmpty, !name.isEmpty else {
-            statusMessage = "Signal URL and hostname required"
+        guard !url.isEmpty else {
+            statusMessage = "Signal URL is required"
             return
         }
-        
-        guard let binaryPath = findBinary() else {
-            statusMessage = "remotyy binary not found. Build with: make build"
-            os_log("Binary not found", log: log, type: .error)
+        guard let binary = findBinary() else {
+            statusMessage = "remotyy binary not found"
+            os_log("Binary not found", log: Log, type: .error)
             return
         }
-        
-        os_log("Starting: %{public}s --signal %{public}s --name %{public}s",
-               log: log, type: .info, binaryPath, url, name)
         
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: binaryPath)
+        process.executableURL = URL(fileURLWithPath: binary)
         process.arguments = ["host", "--signal", url, "--name", name]
         if !masterPassword.isEmpty {
             process.arguments?.append("--master-password")
@@ -85,47 +73,38 @@ class HostManager: ObservableObject {
         }
         process.currentDirectoryURL = URL(fileURLWithPath: NSHomeDirectory())
         
-        // Capturing stdout
         let outPipe = Pipe()
         process.standardOutput = outPipe
-        outPipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            if data.count > 0, let output = String(data: data, encoding: .utf8) {
-                os_log("%{public}s", log: log, type: .debug, output.trimmingCharacters(in: .whitespacesAndNewlines))
+        outPipe.fileHandleForReading.readabilityHandler = { h in
+            let d = h.availableData
+            if d.count > 0, let s = String(data: d, encoding: .utf8) {
+                os_log("%{public}s", log: Log, type: .debug, s.trimmingCharacters(in: .whitespacesAndNewlines))
             }
         }
         
-        // Capturing stderr
         let errPipe = Pipe()
         process.standardError = errPipe
-        errPipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            if data.count > 0, let output = String(data: data, encoding: .utf8) {
-                os_log("stderr: %{public}s", log: log, type: .error, output.trimmingCharacters(in: .whitespacesAndNewlines))
+        errPipe.fileHandleForReading.readabilityHandler = { h in
+            let d = h.availableData
+            if d.count > 0, let s = String(data: d, encoding: .utf8) {
+                os_log("stderr: %{public}s", log: Log, type: .error, s.trimmingCharacters(in: .whitespacesAndNewlines))
             }
         }
         
         process.terminationHandler = { [weak self] proc in
             outPipe.fileHandleForReading.readabilityHandler = nil
             errPipe.fileHandleForReading.readabilityHandler = nil
-            
             DispatchQueue.main.async {
-                guard let self = self else { return }
-                self.isRunning = false
-                self.hostProcess = nil
-                self.healthTimer?.invalidate()
-                self.healthTimer = nil
-                
+                self?.isRunning = false
+                self?.hostProcess = nil
+                self?.healthTimer?.invalidate()
+                self?.healthTimer = nil
                 let status = proc.terminationStatus
-                if status == 0 {
-                    self.statusMessage = "Stopped"
-                } else {
-                    self.statusMessage = "Crashed (exit: \(status))"
-                    // Read remaining stderr
+                self?.statusMessage = status == 0 ? "Stopped" : "Crashed (exit \(status))"
+                if status != 0 {
                     let err = String(data: errPipe.fileHandleForReading.availableData, encoding: .utf8) ?? ""
-                    os_log("Crash stderr: %{public}s", log: log, type: .error, err)
+                    os_log("Crash: %{public}s", log: Log, type: .error, err)
                 }
-                os_log("Host exit: %d", log: log, type: .info, status)
             }
         }
         
@@ -134,23 +113,25 @@ class HostManager: ObservableObject {
             hostProcess = process
             isRunning = true
             statusMessage = "Running — \(name)"
-            os_log("Host PID %d", log: log, type: .info, process.processIdentifier)
-            startHealthCheck()
+            
+            healthTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+                guard let self = self, let proc = self.hostProcess, !proc.isRunning else { return }
+                Task { @MainActor in
+                    self.isRunning = false
+                    self.statusMessage = "Process ended"
+                }
+            }
         } catch {
             statusMessage = "Failed: \(error.localizedDescription)"
-            os_log("Start failed: %{public}s", log: log, type: .error, error.localizedDescription)
         }
     }
     
     func stopHost() {
-        guard let process = hostProcess, isRunning else { return }
-        os_log("Stopping PID %d", log: log, type: .info, process.processIdentifier)
-        process.terminate()
-        // Force kill after grace period
+        guard let proc = hostProcess, isRunning else { return }
+        proc.terminate()
         DispatchQueue.global().asyncAfter(deadline: .now() + 3) { [weak self] in
-            guard let self = self, let proc = self.hostProcess, proc.isRunning else { return }
-            os_log("Force kill PID %d", log: log, type: .error, proc.processIdentifier)
-            kill(proc.processIdentifier, SIGKILL)
+            guard let self = self, let p = self.hostProcess, p.isRunning else { return }
+            kill(p.processIdentifier, SIGKILL)
         }
         hostProcess = nil
         isRunning = false
@@ -159,39 +140,28 @@ class HostManager: ObservableObject {
         statusMessage = "Stopped"
     }
     
-    private func startHealthCheck() {
-        healthTimer?.invalidate()
-        healthTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-            guard let self = self, let proc = self.hostProcess else { return }
-            if !proc.isRunning {
-                Task { @MainActor in
-                    self.isRunning = false
-                    self.statusMessage = "Process ended"
-                }
-            }
-        }
-    }
-    
     private func findBinary() -> String? {
-        // Bundled in .app
-        if let bundled = Bundle.main.path(forResource: "remotyyd", ofType: nil) {
-            if FileManager.default.fileExists(atPath: bundled) { return bundled }
+        if let p = Bundle.main.path(forResource: "remotyyd", ofType: nil), FileManager.default.fileExists(atPath: p) {
+            return p
         }
-        if let bundled = Bundle.main.path(forResource: "remotyy", ofType: nil) {
-            if FileManager.default.fileExists(atPath: bundled) { return bundled }
+        if let p = Bundle.main.path(forResource: "remotyy", ofType: nil), FileManager.default.fileExists(atPath: p) {
+            return p
         }
-        // PATH
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        task.arguments = ["remotyy"]
+        let t = Process()
+        t.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        t.arguments = ["remotyy"]
         let p = Pipe()
-        task.standardOutput = p
-        try? task.run()
-        task.waitUntilExit()
-        if task.terminationStatus == 0 {
-            let data = p.fileHandleForReading.readDataToEndOfFile()
-            let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if !path.isEmpty { return path }
+        t.standardOutput = p
+        try? t.run()
+        t.waitUntilExit()
+        if t.terminationStatus == 0 {
+            let s = (try? p.fileHandleForReading.readToEnd()).flatMap { String(data: $0, encoding: .utf8) }?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if let s = s, !s.isEmpty { return s }
+        }
+        // Hardcoded fallbacks
+        for path in ["/usr/local/bin/remotyy", "/opt/homebrew/bin/remotyy"] {
+            if FileManager.default.fileExists(atPath: path) { return path }
         }
         return nil
     }
@@ -204,7 +174,11 @@ class HostManager: ObservableObject {
                 try SMAppService.mainApp.unregister()
             }
         } catch {
-            os_log("Launch at login failed: %{public}s", log: log, type: .error, error.localizedDescription)
+            os_log("SMAppService: %{public}s", log: Log, type: .error, error.localizedDescription)
         }
     }
+}
+
+private extension String {
+    var nonEmpty: String? { isEmpty ? nil : self }
 }
