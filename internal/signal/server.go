@@ -1,114 +1,204 @@
+// Package signal implements the WebSocket signaling server for WebRTC negotiation.
+// The signaling server is a blind relay — it coordinates connections but never sees
+// terminal or screen data.
 package signal
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/sametyilmaztemel/remotyy/internal/config"
+	"github.com/sametyilmaztemel/remotyy/internal/logging"
 	"github.com/sametyilmaztemel/remotyy/internal/protocol"
 )
 
 var upgrader = websocket.Upgrader{
-	CheckOrigin:     func(r *http.Request) bool { return true },
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
+	CheckOrigin:       func(r *http.Request) bool { return true },
+	ReadBufferSize:    4096,
+	WriteBufferSize:   4096,
+	EnableCompression: true,
 }
 
-// Peer represents a connected WebSocket peer.
+// PeerState tracks the lifecycle of a connected peer.
+type PeerState int
+
+const (
+	PeerNew PeerState = iota
+	PeerRegistered
+	PeerInRoom
+	PeerDisconnected
+)
+
+// Peer represents a connected WebSocket peer (host or client).
 type Peer struct {
 	ID         string
 	Role       string // "host" or "client"
 	Conn       *websocket.Conn
-	Hostname   string
-	Platform   string
-	Arch       string
-	NeedsMaster bool
-	Features   []string
-	Room       string
+	RemoteAddr string
+	State      PeerState
+	Info       protocol.HostInfo
+	RoomID     string
+	ConnectedAt time.Time
+	LastHeartbeat time.Time
 	Mu         sync.Mutex
+	log        zerolog.Logger
 }
 
-// Room connects a host and client for signaling.
+// Room pairs a host and client for WebRTC negotiation.
 type Room struct {
-	ID      string
-	Host    *Peer
-	Client  *Peer
-	Created time.Time
+	ID        string
+	Host      *Peer
+	Client    *Peer
+	CreatedAt time.Time
+	mu        sync.Mutex
 }
 
-// Server is the signaling server.
+// Server is the WebSocket signaling server.
 type Server struct {
-	mu          sync.RWMutex
-	hosts       map[string]*Peer // hostID → Peer
-	rooms       map[string]*Room // roomID → Room
-	devMode     bool
-	authToken   string
-	peerTimeout time.Duration
+	cfg        config.SignalConfig
+	httpServer *http.Server
+	peers      map[string]*Peer      // peerID → Peer
+	rooms      map[string]*Room      // roomID → Room
+	hostIndex  map[string]*Peer      // hostname → Peer (fast lookup)
+	mu         sync.RWMutex
+	peerCount  atomic.Int64
+	roomCount  atomic.Int64
+	accepting  atomic.Bool
+	log        *logging.Logger
+	done       chan struct{}
 }
 
-// NewServer creates a new signaling server.
-func NewServer(authToken string, devMode bool) *Server {
+// NewServer creates a signaling server.
+func NewServer(cfg config.SignalConfig, log *logging.Logger) *Server {
 	return &Server{
-		hosts:       make(map[string]*Peer),
-		rooms:       make(map[string]*Room),
-		devMode:     devMode,
-		authToken:   authToken,
-		peerTimeout: 30 * time.Second,
+		cfg:       cfg,
+		peers:     make(map[string]*Peer),
+		rooms:     make(map[string]*Room),
+		hostIndex: make(map[string]*Peer),
+		log:       log,
+		done:      make(chan struct{}),
 	}
 }
 
-// HandleWebSocket handles incoming WebSocket connections.
-func (s *Server) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+// Start begins listening for WebSocket connections.
+func (s *Server) Start(ctx context.Context) error {
+	s.accepting.Store(true)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws", s.handleWebSocket)
+	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/api/hosts", s.handleListHostsAPI)
+	mux.HandleFunc("/api/stats", s.handleStats)
+
+	addr := s.cfg.Addr()
+	s.httpServer = &http.Server{
+		Addr:         addr,
+		Handler:      withMiddleware(mux, s.cfg.DevMode),
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+		ConnContext:  func(ctx context.Context, c net.Conn) context.Context { return ctx },
+	}
+
+	// Start listening
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listen on %s: %w", addr, err)
+	}
+
+	s.log.Info().
+		Str("addr", addr).
+		Bool("tls", s.cfg.TLS.Enabled).
+		Bool("dev_mode", s.cfg.DevMode).
+		Int("rate_limit", s.cfg.RateLimit).
+		Msg("Signaling server starting")
+
+	go func() {
+		if s.cfg.TLS.Enabled {
+			err = s.httpServer.ServeTLS(listener, s.cfg.TLS.CertFile, s.cfg.TLS.KeyFile)
+		} else {
+			err = s.httpServer.Serve(listener)
+		}
+		if err != nil && err != http.ErrServerClosed {
+			s.log.Fatal().Err(err).Msg("Server error")
+		}
+	}()
+
+	// Wait for shutdown
+	<-ctx.Done()
+	return s.Shutdown()
+}
+
+// Shutdown gracefully stops the server.
+func (s *Server) Shutdown() error {
+	s.accepting.Store(false)
+	if s.httpServer != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return s.httpServer.Shutdown(ctx)
+	}
+	return nil
+}
+
+// handleWebSocket upgrades HTTP to WebSocket.
+func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	if !s.accepting.Load() {
+		http.Error(w, "Server shutting down", http.StatusServiceUnavailable)
+		return
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Error().Err(err).Msg("WebSocket upgrade failed")
+		log.Warn().Err(err).Msg("WebSocket upgrade failed")
 		return
 	}
 
 	peer := &Peer{
-		ID:   fmt.Sprintf("peer-%d", time.Now().UnixNano()),
-		Conn: conn,
+		ID:            fmt.Sprintf("p-%d", time.Now().UnixNano()),
+		Conn:          conn,
+		RemoteAddr:    r.RemoteAddr,
+		State:         PeerNew,
+		ConnectedAt:   time.Now(),
+		LastHeartbeat: time.Now(),
 	}
 
-	defer s.disconnect(peer)
-	defer conn.Close()
+	peer.log = log.With().Str("peer", peer.ID).Str("remote", r.RemoteAddr).Logger()
 
-	// Read first message to determine role
-	var msg protocol.SignalMessage
-	if err := conn.ReadJSON(&msg); err != nil {
-		log.Error().Err(err).Msg("Failed to read initial message")
-		return
-	}
+	peer.log.Info().Msg("New WebSocket connection")
 
-	switch msg.Type {
-	case protocol.MsgRegister:
-		s.handleRegister(peer, msg)
-	case protocol.MsgRequestHost:
-		s.handleRequestHost(peer, msg)
-	default:
-		s.sendError(peer, "First message must be register or request_host")
-		return
-	}
+	s.mu.Lock()
+	s.peers[peer.ID] = peer
+	s.peerCount.Add(1)
+	s.mu.Unlock()
 
-	// Main message loop
+	defer s.cleanupPeer(peer)
 	s.readLoop(peer)
 }
 
+// readLoop processes incoming WebSocket messages.
 func (s *Server) readLoop(peer *Peer) {
 	for {
 		_, data, err := peer.Conn.ReadMessage()
 		if err != nil {
-			log.Debug().Str("peer", peer.ID).Err(err).Msg("Read error")
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
+				peer.log.Debug().Err(err).Msg("WebSocket read error")
+			}
 			return
 		}
 
-		var msg protocol.SignalMessage
+		var msg protocol.Message
 		if err := json.Unmarshal(data, &msg); err != nil {
-			log.Error().Err(err).Msg("Failed to unmarshal message")
+			peer.log.Warn().Err(err).Msg("Invalid message format")
+			s.sendError(peer, "invalid_message", "Malformed JSON")
 			continue
 		}
 
@@ -116,138 +206,189 @@ func (s *Server) readLoop(peer *Peer) {
 	}
 }
 
-func (s *Server) routeMessage(sender *Peer, msg protocol.SignalMessage) {
+// routeMessage dispatches a message based on its type.
+func (s *Server) routeMessage(peer *Peer, msg protocol.Message) {
+	peer.log.Debug().Str("type", string(msg.Type)).Msg("Received message")
+
 	switch msg.Type {
-	case protocol.MsgOffer, protocol.MsgAnswer, protocol.MsgICE:
-		s.forwardToRoom(sender, msg)
+	case protocol.MsgRegister:
+		s.handleRegister(peer, msg)
 	case protocol.MsgHeartbeat:
-		// Hosts send heartbeats — silently acknowledge
+		s.handleHeartbeat(peer)
+	case protocol.MsgUpdate:
+		s.handleUpdate(peer, msg)
+	case protocol.MsgListHosts:
+		s.handleListHosts(peer)
+	case protocol.MsgConnect:
+		s.handleConnect(peer, msg)
+	case protocol.MsgOffer, protocol.MsgAnswer, protocol.MsgICECandidate:
+		s.relayToRoom(peer, msg)
+	case protocol.MsgPing:
+		s.sendMessage(peer, protocol.NewMessage(protocol.MsgPong, nil))
 	default:
-		log.Warn().Str("type", string(msg.Type)).Str("from", sender.ID).
-			Msg("Unknown message type")
+		peer.log.Warn().Str("type", string(msg.Type)).Msg("Unknown message type")
 	}
 }
 
-func (s *Server) handleRegister(peer *Peer, msg protocol.SignalMessage) {
-	data, _ := json.Marshal(msg.Payload)
+func (s *Server) handleRegister(peer *Peer, msg protocol.Message) {
+	if peer.State != PeerNew {
+		s.sendError(peer, "invalid_state", "Already registered")
+		return
+	}
+
 	var reg protocol.RegisterPayload
-	json.Unmarshal(data, &reg)
+	if err := json.Unmarshal(msg.Payload, &reg); err != nil {
+		s.sendError(peer, "invalid_payload", "Cannot parse registration")
+		return
+	}
 
 	peer.Role = "host"
-	peer.Hostname = reg.Hostname
-	peer.Platform = reg.Platform
-	peer.Arch = reg.Arch
-	peer.NeedsMaster = reg.NeedsMaster
-	peer.Features = reg.Features
+	peer.State = PeerRegistered
+	peer.Info = protocol.HostInfo{
+		ID:       peer.ID,
+		Name:     reg.Name,
+		Platform: reg.Platform,
+		Arch:     reg.Arch,
+		Version:  reg.Version,
+		Online:   true,
+		Features: reg.Features,
+	}
 
 	s.mu.Lock()
-	s.hosts[peer.ID] = peer
+	s.hostIndex[reg.Name] = peer
 	s.mu.Unlock()
 
-	log.Info().
-		Str("host", peer.Hostname).
-		Str("platform", peer.Platform).
-		Str("arch", peer.Arch).
-		Str("id", peer.ID).
+	s.log.Audit.Log("host_register", peer.ID, "", peer.RemoteAddr,
+		fmt.Sprintf("host=%s platform=%s/%s", reg.Name, reg.Platform, reg.Arch), true)
+
+	peer.log.Info().
+		Str("name", reg.Name).
+		Str("platform", reg.Platform).
+		Strs("features", reg.Features).
 		Msg("Host registered")
 
-	s.send(peer, protocol.SignalMessage{
-		Type:    protocol.MsgRegister,
-		Payload: map[string]string{"id": peer.ID, "status": "ok"},
-	})
+	s.sendMessage(peer, protocol.NewMessage(protocol.MsgRegister, map[string]interface{}{
+		"id":     peer.ID,
+		"status": "ok",
+	}))
 }
 
-func (s *Server) handleRequestHost(peer *Peer, msg protocol.SignalMessage) {
-	peer.Role = "client"
-	hostID := ""
-	if m, ok := msg.Payload.(map[string]interface{}); ok {
-		hostID, _ = m["host_id"].(string)
-	}
+func (s *Server) handleHeartbeat(peer *Peer) {
+	peer.Mu.Lock()
+	peer.LastHeartbeat = time.Now()
+	peer.Mu.Unlock()
+}
 
-	log.Info().Str("client", peer.ID).Str("requested_host", hostID).
-		Msg("Client requesting host")
+func (s *Server) handleUpdate(peer *Peer, msg protocol.Message) {
+	var update protocol.HostInfo
+	if err := json.Unmarshal(msg.Payload, &update); err != nil {
+		return
+	}
+	peer.Mu.Lock()
+	if update.Features != nil {
+		peer.Info.Features = update.Features
+	}
+	peer.Mu.Unlock()
+}
+
+func (s *Server) handleListHosts(peer *Peer) {
+	if peer.Role == "" {
+		peer.Role = "client"
+	}
+	peer.State = PeerRegistered
 
 	s.mu.RLock()
-	// If specific host requested, find it; otherwise return first available
-	var target *Peer
-	if hostID != "" {
-		if h, ok := s.hosts[hostID]; ok {
-			target = h
-		}
-	} else {
-		for _, h := range s.hosts {
-			if h.Room == "" { // host not already in a room
-				target = h
-				break
-			}
-		}
-	}
-	hosts := make([]protocol.HostInfo, 0, len(s.hosts))
-	for id, h := range s.hosts {
-		if h.Room == "" {
-			hosts = append(hosts, protocol.HostInfo{
-				ID:          id,
-				Name:        h.Hostname,
-				Platform:    h.Platform,
-				Arch:        h.Arch,
-				Online:      true,
-				NeedsMaster: h.NeedsMaster,
-				Features:    h.Features,
-			})
+	hosts := make([]protocol.HostInfo, 0, len(s.hostIndex))
+	for _, p := range s.hostIndex {
+		if p.State == PeerRegistered || p.State == PeerInRoom {
+			hosts = append(hosts, p.Info)
 		}
 	}
 	s.mu.RUnlock()
 
-	if target == nil {
-		// Send available hosts list
-		s.send(peer, protocol.SignalMessage{
-			Type:    protocol.MsgRequestHost,
-			Payload: map[string]interface{}{"hosts": hosts},
-		})
+	s.sendMessage(peer, protocol.NewMessage(protocol.MsgHostList, map[string]interface{}{
+		"hosts": hosts,
+	}))
+}
+
+func (s *Server) handleConnect(peer *Peer, msg protocol.Message) {
+	var req protocol.ConnectPayload
+	if err := json.Unmarshal(msg.Payload, &req); err != nil {
+		s.sendError(peer, "invalid_payload", "Cannot parse connect request")
+		return
+	}
+
+	if peer.Role == "" {
+		peer.Role = "client"
+	}
+
+	// Find host
+	s.mu.RLock()
+	host, ok := s.peers[req.HostID]
+	if !ok {
+		// Try by hostname
+		if h, found := s.hostIndex[req.HostID]; found {
+			host = h
+		}
+	}
+	s.mu.RUnlock()
+
+	if host == nil || host.State == PeerDisconnected {
+		s.sendError(peer, "host_not_found", fmt.Sprintf("Host %s is offline", req.HostID))
 		return
 	}
 
 	// Create room
-	roomID := fmt.Sprintf("room-%s-%s", target.ID, peer.ID)
+	roomID := fmt.Sprintf("r-%d", time.Now().UnixNano())
 	room := &Room{
-		ID:      roomID,
-		Host:    target,
-		Client:  peer,
-		Created: time.Now(),
+		ID:        roomID,
+		Host:      host,
+		Client:    peer,
+		CreatedAt: time.Now(),
 	}
 
 	s.mu.Lock()
-	target.Room = roomID
-	peer.Room = roomID
 	s.rooms[roomID] = room
+	host.RoomID = roomID
+	host.State = PeerInRoom
+	peer.RoomID = roomID
+	peer.State = PeerInRoom
+	s.roomCount.Add(1)
 	s.mu.Unlock()
 
-	log.Info().Str("room", roomID).Msg("Room created — client connected to host")
+	s.log.Audit.Log("room_created", peer.ID, roomID, peer.RemoteAddr,
+		fmt.Sprintf("host=%s client connected", host.Info.Name), true)
+
+	log.Info().
+		Str("room", roomID).
+		Str("host", host.Info.Name).
+		Str("client", peer.ID).
+		Msg("Room created")
+
+	// Tell client the room is ready
+	s.sendMessage(peer, protocol.NewMessage(protocol.MsgRoomReady, map[string]interface{}{
+		"room":    roomID,
+		"host_id": host.ID,
+		"host":    host.Info,
+	}))
 
 	// Notify host about incoming client
-	s.send(target, protocol.SignalMessage{
-		Type:    protocol.MsgRequestHost,
-		Payload: map[string]string{"client_id": peer.ID},
-		Room:    roomID,
-	})
-
-	// Notify client about approved connection
-	s.send(peer, protocol.SignalMessage{
-		Type:    protocol.MsgApproved,
-		Payload: map[string]string{"room": roomID, "host_id": target.ID},
-	})
+	s.sendMessage(host, protocol.NewMessage(protocol.MsgConnect, map[string]interface{}{
+		"room":      roomID,
+		"client_id": peer.ID,
+	}))
 }
 
-func (s *Server) forwardToRoom(sender *Peer, msg protocol.SignalMessage) {
+func (s *Server) relayToRoom(sender *Peer, msg protocol.Message) {
 	s.mu.RLock()
-	room, ok := s.rooms[sender.Room]
+	room, ok := s.rooms[sender.RoomID]
 	s.mu.RUnlock()
+
 	if !ok || room == nil {
-		log.Warn().Str("peer", sender.ID).Msg("Sender not in a room")
+		s.sendError(sender, "no_room", "You are not in a room")
 		return
 	}
 
-	// Forward to the other peer in the room
 	var target *Peer
 	if sender.ID == room.Host.ID {
 		target = room.Client
@@ -259,17 +400,15 @@ func (s *Server) forwardToRoom(sender *Peer, msg protocol.SignalMessage) {
 		return
 	}
 
-	s.send(target, msg)
+	msg.Room = room.ID
+	s.sendMessage(target, msg)
 }
 
-func (s *Server) disconnect(peer *Peer) {
+func (s *Server) cleanupPeer(peer *Peer) {
 	s.mu.Lock()
-	delete(s.hosts, peer.ID)
 
-	// Clean up room if any
-	if room, ok := s.rooms[peer.Room]; ok {
-		delete(s.rooms, peer.Room)
-		// Notify other peer
+	// Remove from room if active
+	if room, ok := s.rooms[peer.RoomID]; ok && room != nil {
 		var other *Peer
 		if peer.ID == room.Host.ID {
 			other = room.Client
@@ -277,69 +416,127 @@ func (s *Server) disconnect(peer *Peer) {
 			other = room.Host
 		}
 		if other != nil {
-			other.Room = ""
-			s.send(other, protocol.SignalMessage{
-				Type:    protocol.MsgError,
-				Payload: map[string]string{"message": "peer_disconnected"},
-			})
+			other.RoomID = ""
+			other.State = PeerRegistered
+			s.sendMessage(other, protocol.NewMessage(protocol.MsgPeerLeft, map[string]interface{}{
+				"peer_id": peer.ID,
+				"reason":  "disconnected",
+			}))
+		}
+		delete(s.rooms, peer.RoomID)
+		s.roomCount.Add(-1)
+	}
+
+	// Remove from host index
+	for name, p := range s.hostIndex {
+		if p.ID == peer.ID {
+			delete(s.hostIndex, name)
+			break
 		}
 	}
+
+	delete(s.peers, peer.ID)
+	s.peerCount.Add(-1)
 	s.mu.Unlock()
 
-	log.Info().Str("peer", peer.ID).Str("role", peer.Role).Msg("Disconnected")
+	peer.State = PeerDisconnected
+
+	s.log.Audit.Log("peer_disconnect", peer.ID, "", peer.RemoteAddr,
+		fmt.Sprintf("role=%s", peer.Role), true)
+
+	log.Info().
+		Str("peer", peer.ID).
+		Str("role", peer.Role).
+		Msg("Peer disconnected")
 }
 
-// ListHosts returns all currently registered hosts.
-func (s *Server) ListHosts() []protocol.HostInfo {
+// ======== HTTP Handlers ========
+
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	s.mu.RLock()
-	defer s.mu.RUnlock()
+	hostCount := len(s.hostIndex)
+	roomCount := len(s.rooms)
+	peerCount := len(s.peers)
+	s.mu.RUnlock()
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":  "ok",
+		"version": config.Version,
+		"hosts":   hostCount,
+		"rooms":   roomCount,
+		"peers":   peerCount,
+		"uptime":  time.Since(startTime).String(),
+	})
+}
 
-	hosts := make([]protocol.HostInfo, 0, len(s.hosts))
-	for id, h := range s.hosts {
-		hosts = append(hosts, protocol.HostInfo{
-			ID:          id,
-			Name:        h.Hostname,
-			Platform:    h.Platform,
-			Arch:        h.Arch,
-			Online:      h.Room == "",
-			NeedsMaster: h.NeedsMaster,
-			Features:    h.Features,
-		})
+var startTime = time.Now()
+
+func (s *Server) handleListHostsAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
 	}
-	return hosts
+	w.Header().Set("Content-Type", "application/json")
+	s.mu.RLock()
+	hosts := make([]protocol.HostInfo, 0, len(s.hostIndex))
+	for _, p := range s.hostIndex {
+		hosts = append(hosts, p.Info)
+	}
+	s.mu.RUnlock()
+	json.NewEncoder(w).Encode(hosts)
 }
 
-// HTTPHandler returns an HTTP handler for the REST API (optional).
-func (s *Server) HTTPHandler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		s.mu.RLock()
-		hostCount := len(s.hosts)
-		roomCount := len(s.rooms)
-		s.mu.RUnlock()
-		w.Write([]byte(fmt.Sprintf(
-			`{"status":"ok","hosts":%d,"rooms":%d}`+"\n", hostCount, roomCount)))
-	})
-	mux.HandleFunc("/hosts", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(s.ListHosts())
-	})
-	mux.HandleFunc("/ws", s.HandleWebSocket)
-	return mux
+func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	s.mu.RLock()
+	info := map[string]interface{}{
+		"peers":       s.peerCount.Load(),
+		"rooms":       s.roomCount.Load(),
+		"hosts":       len(s.hostIndex),
+		"accepting":   s.accepting.Load(),
+	}
+	s.mu.RUnlock()
+	json.NewEncoder(w).Encode(info)
 }
 
-func (s *Server) send(peer *Peer, msg protocol.SignalMessage) {
+// ======== Helpers ========
+
+func (s *Server) sendMessage(peer *Peer, msg protocol.Message) {
 	peer.Mu.Lock()
 	defer peer.Mu.Unlock()
 	if err := peer.Conn.WriteJSON(msg); err != nil {
-		log.Error().Err(err).Str("peer", peer.ID).Msg("Write failed")
+		peer.log.Warn().Err(err).Msg("Failed to send message")
 	}
 }
 
-func (s *Server) sendError(peer *Peer, message string) {
-	s.send(peer, protocol.SignalMessage{
-		Type:    protocol.MsgError,
-		Payload: map[string]string{"message": message},
+func (s *Server) sendError(peer *Peer, code, message string) {
+	s.sendMessage(peer, protocol.NewMessage(protocol.MsgError, protocol.ErrorPayload{
+		Code:    0,
+		Message: fmt.Sprintf("%s: %s", code, message),
+	}))
+}
+
+// withMiddleware adds CORS, rate limiting, and logging middleware.
+func withMiddleware(next http.Handler, dev bool) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// CORS
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// Logging
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		log.Debug().
+			Str("method", r.Method).
+			Str("path", r.URL.Path).
+			Str("remote", r.RemoteAddr).
+			Dur("dur", time.Since(start)).
+			Msg("HTTP request")
 	})
 }

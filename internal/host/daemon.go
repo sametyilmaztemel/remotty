@@ -1,361 +1,449 @@
+// Package host implements the remotyy host daemon that runs on machines
+// to be accessed remotely. It connects to the signaling server and
+// manages incoming WebRTC sessions.
 package host
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/signal"
 	"runtime"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/gorilla/websocket"
-	pionw "github.com/pion/webrtc/v4"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
+	"github.com/sametyilmaztemel/remotyy/internal/auth"
+	"github.com/sametyilmaztemel/remotyy/internal/config"
 	"github.com/sametyilmaztemel/remotyy/internal/protocol"
 	"github.com/sametyilmaztemel/remotyy/internal/pty"
 	"github.com/sametyilmaztemel/remotyy/internal/webrtc"
 )
 
-// Daemon represents the remotyy host daemon.
+// Daemon runs on the host machine and manages remote access sessions.
 type Daemon struct {
-	config     Config
+	cfg        config.HostConfig
 	signalConn *websocket.Conn
 	peerID     string
-	webrtc     *webrtc.Engine
+	webrtcEng  *webrtc.Engine
 	ptyMgr     *pty.Manager
-	mu         sync.Mutex
+	sessions   map[string]*Session
+	mu         sync.RWMutex
 	done       chan struct{}
+	log        zerolog.Logger
 }
 
-// Config for the host daemon.
-type Config struct {
-	SignalURL     string
-	Hostname      string
-	MasterHash    string // bcrypt hash of master password
-	Features      []string
-	DeviceName    string
-	AllowList     []string // allowed device IDs
-	ReconnectWait time.Duration
+// Session tracks an active client connection.
+type Session struct {
+	ID        string
+	ClientID  string
+	RoomID    string
+	WebRTC    *webrtc.Engine
+	PTYSess   *pty.Session
+	CreatedAt time.Time
+	Authed    bool
 }
 
 // NewDaemon creates a new host daemon.
-func NewDaemon(cfg Config) *Daemon {
+func NewDaemon(cfg config.HostConfig, log zerolog.Logger) (*Daemon, error) {
+	// Hash master password if provided in plaintext
+	if cfg.MasterPassword != "" && cfg.MasterHash == "" {
+		hash, err := auth.HashPassword(cfg.MasterPassword)
+		if err != nil {
+			return nil, fmt.Errorf("hash master password: %w", err)
+		}
+		cfg.MasterHash = hash
+	}
+
+	if cfg.Name == "" {
+		cfg.Name, _ = os.Hostname()
+	}
+	if cfg.Features == nil {
+		cfg.Features = []string{"terminal"}
+	}
 	if cfg.ReconnectWait == 0 {
 		cfg.ReconnectWait = 5 * time.Second
 	}
-	if len(cfg.Features) == 0 {
-		cfg.Features = []string{"terminal"}
+	if cfg.HeartbeatInt == 0 {
+		cfg.HeartbeatInt = 15 * time.Second
 	}
-	hostname := cfg.Hostname
-	if hostname == "" {
-		hostname, _ = os.Hostname()
+	if cfg.MaxSessions == 0 {
+		cfg.MaxSessions = 10
 	}
 
 	return &Daemon{
-		config: Config{
-			SignalURL:     cfg.SignalURL,
-			Hostname:      hostname,
-			MasterHash:    cfg.MasterHash,
-			Features:      cfg.Features,
-			DeviceName:    cfg.DeviceName,
-			AllowList:     cfg.AllowList,
-			ReconnectWait: cfg.ReconnectWait,
-		},
-		done:  make(chan struct{}),
-		ptyMgr: pty.NewManager(),
-	}
+		cfg:      cfg,
+		ptyMgr:   pty.NewManager(),
+		sessions: make(map[string]*Session),
+		done:     make(chan struct{}),
+		log:      log.With().Str("component", "host").Logger(),
+	}, nil
 }
 
-// Hostname returns the configured hostname.
-func (d *Daemon) Hostname() string {
-	return d.config.Hostname
-}
+// Run starts the host daemon and blocks until context cancellation.
+func (d *Daemon) Run(ctx context.Context) error {
+	defer d.cleanup()
 
-// Run starts the host daemon and blocks until signal.
-func (d *Daemon) Run() error {
-	log.Info().
-		Str("signal_url", d.config.SignalURL).
-		Str("hostname", d.config.Hostname).
-		Strs("features", d.config.Features).
-		Msg("remotyy host starting")
-
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-
-	// Connect to signaling server with auto-reconnect
-	go d.connectLoop()
-
-	<-sigCh
-	log.Info().Msg("Shutting down...")
-	close(d.done)
-	if d.signalConn != nil {
-		d.signalConn.Close()
-	}
-	return nil
-}
-
-func (d *Daemon) connectLoop() {
 	for {
 		select {
-		case <-d.done:
-			return
+		case <-ctx.Done():
+			return nil
 		default:
-			if err := d.connect(); err != nil {
-				log.Error().Err(err).Msg("Connection failed, retrying...")
-				time.Sleep(d.config.ReconnectWait)
+			if err := d.connect(ctx); err != nil {
+				d.log.Error().Err(err).Msg("Connection failed, reconnecting...")
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-time.After(d.cfg.ReconnectWait):
+				}
 			}
 		}
 	}
 }
 
-func (d *Daemon) connect() error {
-	conn, _, err := websocket.DefaultDialer.Dial(d.config.SignalURL+"/ws", nil)
+func (d *Daemon) connect(ctx context.Context) error {
+	d.log.Info().Str("url", d.cfg.SignalURL+"/ws").Msg("Connecting to signaling server")
+
+	conn, _, err := websocket.DefaultDialer.DialContext(ctx, d.cfg.SignalURL+"/ws", nil)
 	if err != nil {
-		return fmt.Errorf("dial signal server: %w", err)
+		return fmt.Errorf("dial: %w", err)
 	}
+
 	d.mu.Lock()
 	d.signalConn = conn
 	d.mu.Unlock()
 
-	log.Info().Msg("Connected to signaling server")
+	defer conn.Close()
 
 	// Register as host
-	needsMaster := d.config.MasterHash != ""
-	reg := protocol.SignalMessage{
-		Type: protocol.MsgRegister,
-		Payload: protocol.RegisterPayload{
-			Hostname:    d.config.Hostname,
-			Platform:    runtime.GOOS,
-			Arch:        runtime.GOARCH,
-			Version:     "0.1.0",
-			NeedsMaster: needsMaster,
-			Features:    d.config.Features,
-		},
-	}
-	if err := conn.WriteJSON(reg); err != nil {
+	regMsg := protocol.NewMessage(protocol.MsgRegister, protocol.RegisterPayload{
+		Name:     d.cfg.Name,
+		Platform: runtime.GOOS,
+		Arch:     runtime.GOARCH,
+		Version:  config.Version,
+		Features: d.cfg.Features,
+		DeviceID: d.cfg.DeviceID,
+	})
+
+	if err := conn.WriteJSON(regMsg); err != nil {
 		return fmt.Errorf("register: %w", err)
 	}
 
 	// Read registration response
-	var resp protocol.SignalMessage
-	if err := conn.ReadJSON(&resp); err != nil {
+	_, data, err := conn.ReadMessage()
+	if err != nil {
 		return fmt.Errorf("read register response: %w", err)
 	}
+
+	var resp protocol.Message
+	json.Unmarshal(data, &resp)
 	if resp.Type == protocol.MsgRegister {
-		if p, ok := resp.Payload.(map[string]interface{}); ok {
-			d.peerID, _ = p["id"].(string)
-			log.Info().Str("peer_id", d.peerID).Msg("Registered with signal server")
-		}
+		var payload map[string]interface{}
+		json.Unmarshal(resp.Payload, &payload)
+		d.peerID, _ = payload["id"].(string)
+		d.log.Info().Str("peer_id", d.peerID).Msg("Registered with signaling server")
 	}
 
 	// Start heartbeat
-	go d.heartbeatLoop(conn)
+	hbCtx, hbCancel := context.WithCancel(ctx)
+	defer hbCancel()
+	go d.heartbeatLoop(hbCtx, conn)
 
 	// Read loop
-	d.readLoop(conn)
-	return nil
+	return d.readLoop(ctx, conn)
 }
 
-func (d *Daemon) heartbeatLoop(conn *websocket.Conn) {
-	ticker := time.NewTicker(15 * time.Second)
+func (d *Daemon) heartbeatLoop(ctx context.Context, conn *websocket.Conn) {
+	ticker := time.NewTicker(d.cfg.HeartbeatInt)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-d.done:
+		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			msg := protocol.SignalMessage{Type: protocol.MsgHeartbeat}
-			if err := conn.WriteJSON(msg); err != nil {
-				log.Error().Err(err).Msg("Heartbeat failed")
+			if err := conn.WriteJSON(protocol.NewMessage(protocol.MsgHeartbeat, nil)); err != nil {
+				d.log.Warn().Err(err).Msg("Heartbeat failed")
 				return
 			}
 		}
 	}
 }
 
-func (d *Daemon) readLoop(conn *websocket.Conn) {
-	defer func() {
-		log.Warn().Msg("Signal connection lost")
-		d.mu.Lock()
-		d.signalConn = nil
-		if d.webrtc != nil {
-			d.webrtc.Close()
-			d.webrtc = nil
-		}
-		d.mu.Unlock()
-	}()
-
+func (d *Daemon) readLoop(ctx context.Context, conn *websocket.Conn) error {
 	for {
-		_, data, err := conn.ReadMessage()
-		if err != nil {
-			log.Error().Err(err).Msg("Read error")
-			return
-		}
-
-		var msg protocol.SignalMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			continue
-		}
-
-		switch msg.Type {
-		case protocol.MsgRequestHost:
-			// Client wants to connect — set up WebRTC
-			go d.handleIncomingClient(conn, msg)
-
-		case protocol.MsgOffer:
-			if d.webrtc != nil {
-				d.webrtc.HandleOffer(msg)
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+			_, data, err := conn.ReadMessage()
+			if err != nil {
+				return fmt.Errorf("read: %w", err)
 			}
 
-		case protocol.MsgAnswer:
-			if d.webrtc != nil {
-				d.webrtc.HandleAnswer(msg)
+			var msg protocol.Message
+			if err := json.Unmarshal(data, &msg); err != nil {
+				d.log.Warn().Err(err).Msg("Invalid message")
+				continue
 			}
 
-		case protocol.MsgICE:
-			if d.webrtc != nil {
-				d.webrtc.HandleICE(msg)
-			}
-
-		case protocol.MsgError:
-			log.Warn().Interface("payload", msg.Payload).Msg("Signal error")
+			d.handleMessage(msg)
 		}
 	}
 }
 
-func (d *Daemon) handleIncomingClient(conn *websocket.Conn, msg protocol.SignalMessage) {
-	log.Info().Interface("payload", msg.Payload).Msg("Incoming client connection request")
-
-	// Get client ID from message
-	clientID := ""
-	if m, ok := msg.Payload.(map[string]interface{}); ok {
-		clientID, _ = m["client_id"].(string)
+func (d *Daemon) handleMessage(msg protocol.Message) {
+	switch msg.Type {
+	case protocol.MsgConnect:
+		d.handleConnectRequest(msg)
+	case protocol.MsgPeerLeft:
+		d.handlePeerDisconnect(msg)
+	case protocol.MsgError:
+		d.handleError(msg)
 	}
+}
 
-	// Check allow list if configured
-	if len(d.config.AllowList) > 0 {
+func (d *Daemon) handleConnectRequest(msg protocol.Message) {
+	var payload struct {
+		Room     string `json:"room"`
+		ClientID string `json:"client_id"`
+	}
+	json.Unmarshal(msg.Payload, &payload)
+
+	d.log.Info().Str("client", payload.ClientID).Str("room", payload.Room).
+		Msg("Incoming client connection")
+
+	// Check allow list
+	if len(d.cfg.AllowList) > 0 {
 		allowed := false
-		for _, id := range d.config.AllowList {
-			if id == clientID || id == "*" {
+		for _, id := range d.cfg.AllowList {
+			if id == payload.ClientID || id == "*" {
 				allowed = true
 				break
 			}
 		}
 		if !allowed {
-			log.Warn().Str("client", clientID).Msg("Client not in allow list")
+			d.log.Warn().Str("client", payload.ClientID).Msg("Client not in allow list")
 			return
 		}
 	}
 
-	// Initialize WebRTC engine
+	// Create WebRTC engine for this session
 	engine, err := webrtc.NewEngine(func(cfg *webrtc.EngineConfig) {
-		cfg.SignalConn = conn
-		cfg.RoomID = msg.Room
-		cfg.OnDataChannel = d.onDataChannel
+		cfg.SignalConn = d.signalConn
+		cfg.RoomID = payload.Room
+		cfg.OnDataChannel = d.onDataChannel(payload.Room)
+		cfg.ICEServers = []string{"stun:stun.l.google.com:19302"}
 	})
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to create WebRTC engine")
+		d.log.Error().Err(err).Msg("Failed to create WebRTC engine")
 		return
+	}
+
+	session := &Session{
+		ID:        payload.Room,
+		ClientID:  payload.ClientID,
+		RoomID:    payload.Room,
+		WebRTC:    engine,
+		CreatedAt: time.Now(),
 	}
 
 	d.mu.Lock()
-	d.webrtc = engine
+	d.sessions[payload.Room] = session
 	d.mu.Unlock()
 
-	// Create and send offer
+	// Create and send WebRTC offer
 	offer, err := engine.CreateOffer()
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to create offer")
+		d.log.Error().Err(err).Msg("Failed to create WebRTC offer")
 		return
 	}
 
-	conn.WriteJSON(protocol.SignalMessage{
-		Type:    protocol.MsgOffer,
-		Payload: offer,
-		Room:    msg.Room,
-	})
+	offerMsg := protocol.NewMessage(protocol.MsgOffer, offer)
+	offerMsg.Room = payload.Room
+	d.signalConn.WriteJSON(offerMsg)
 }
 
-func (d *Daemon) onDataChannel(dc *pionw.DataChannel, label string) {
-	log.Info().Str("label", label).Msg("Data channel opened")
+func (d *Daemon) onDataChannel(roomID string) func(*webrtc.DataChannel, string) {
+	return func(dc *webrtc.DataChannel, label string) {
+		d.log.Info().Str("label", label).Str("room", roomID).
+			Msg("Data channel opened")
 
-	switch label {
-	case "auth":
-		d.handleAuthChannel(dc)
-	case "terminal":
-		d.handleTerminalChannel(dc)
+		session := d.getSession(roomID)
+		if session == nil {
+			return
+		}
+
+		switch label {
+		case "auth":
+			d.handleAuthChannel(session, dc)
+		case "terminal":
+			d.handleTerminalChannel(session, dc)
+		case "screen":
+			d.handleScreenChannel(session, dc)
+		case "file":
+			d.handleFileChannel(session, dc)
+		case "clipboard":
+			d.handleClipboardChannel(dc)
+		}
 	}
 }
 
-func (d *Daemon) handleAuthChannel(dc *pionw.DataChannel) {
-	dc.OnMessage(func(msg pionw.DataChannelMessage) {
-		var auth protocol.SignalMessage
-		if err := json.Unmarshal(msg.Data, &auth); err != nil {
+func (d *Daemon) handleAuthChannel(session *Session, dc *webrtc.DataChannel) {
+	dc.OnMessage(func(data []byte) {
+		var msg protocol.Message
+		if err := json.Unmarshal(data, &msg); err != nil {
 			return
 		}
 
-		if auth.Type == protocol.MsgAuth {
-			var payload protocol.AuthPayload
-			data, _ := json.Marshal(auth.Payload)
-			json.Unmarshal(data, &payload)
+		if msg.Type == protocol.MsgAuth {
+			var authPayload protocol.AuthPayload
+			json.Unmarshal(msg.Payload, &authPayload)
 
-			// Verify master password
-			// (bcrypt check happens here)
-			valid := d.config.MasterHash == "" || verifyPassword(payload.Password, d.config.MasterHash)
+			valid := d.cfg.MasterHash == "" ||
+				auth.CheckPassword(authPayload.Password, d.cfg.MasterHash)
 
-			resp := protocol.SignalMessage{
-				Type: protocol.MsgAuthOK,
+			if valid {
+				session.Authed = true
+				dc.SendJSON(protocol.NewMessage(protocol.MsgAuthOK, nil))
+				d.log.Info().Str("client", session.ClientID).Msg("Client authenticated")
+			} else {
+				dc.SendJSON(protocol.NewMessage(protocol.MsgAuthFail, nil))
+				d.log.Warn().Str("client", session.ClientID).Msg("Authentication failed")
 			}
-			if !valid {
-				resp.Type = protocol.MsgAuthFail
-			}
-			data, _ = json.Marshal(resp)
-			dc.Send(data)
 		}
 	})
 }
 
-func (d *Daemon) handleTerminalChannel(dc *pionw.DataChannel) {
-	// Spawn shell via PTY
-	shell := d.ptyMgr.Spawn()
+func (d *Daemon) handleTerminalChannel(session *Session, dc *webrtc.DataChannel) {
+	if !session.Authed {
+		dc.SendJSON(protocol.NewMessage(protocol.MsgError, "Not authenticated"))
+		return
+	}
 
-	dc.OnMessage(func(msg pionw.DataChannelMessage) {
-		var sigMsg protocol.SignalMessage
-		if err := json.Unmarshal(msg.Data, &sigMsg); err != nil {
-			// Raw input
-			shell.Write(msg.Data)
-			return
-		}
+	// Spawn PTY
+	shell, err := d.ptyMgr.Spawn(24, 80)
+	if err != nil {
+		d.log.Error().Err(err).Msg("Failed to spawn PTY")
+		dc.SendJSON(protocol.NewMessage(protocol.MsgError, "Failed to start shell"))
+		return
+	}
+	session.PTYSess = shell
 
-		switch sigMsg.Type {
-		case protocol.MsgInput:
-			data, _ := json.Marshal(sigMsg.Payload)
-			shell.Write(data)
-		case protocol.MsgResize:
-			var resize protocol.ResizePayload
-			data, _ := json.Marshal(sigMsg.Payload)
-			json.Unmarshal(data, &resize)
-			shell.Resize(resize.Rows, resize.Cols)
-		}
-	})
-
-	// Pipe PTY output back to data channel
+	// Pipe PTY output → DataChannel
 	go func() {
-		buf := make([]byte, 4096)
+		buf := make([]byte, 32768)
 		for {
 			n, err := shell.Read(buf)
 			if err != nil {
-				return
+				break
 			}
-			dc.Send(buf[:n])
+			if n > 0 {
+				dc.Send(buf[:n])
+			}
 		}
 	}()
+
+	// Pipe DataChannel input → PTY
+	dc.OnMessage(func(data []byte) {
+		if !session.Authed {
+			return
+		}
+
+		var msg protocol.Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			// Raw input (fast path)
+			shell.Write(data)
+			return
+		}
+
+		switch msg.Type {
+		case protocol.MsgInput:
+			var input string
+			json.Unmarshal(msg.Payload, &input)
+			shell.Write([]byte(input))
+		case protocol.MsgResize:
+			var resize protocol.ResizePayload
+			json.Unmarshal(msg.Payload, &resize)
+			shell.Resize(resize.Rows, resize.Cols)
+		}
+	})
 }
 
-func verifyPassword(password, hash string) bool {
-	// bcrypt.CompareHashAndPassword
-	return true // placeholder — implement with golang.org/x/crypto
+func (d *Daemon) handleScreenChannel(session *Session, dc *webrtc.DataChannel) {
+	// Screen sharing — handled via WebRTC video track
+	// Control messages via data channel
+}
+
+func (d *Daemon) handleFileChannel(session *Session, dc *webrtc.DataChannel) {
+	// File transfer — handled via data channel
+}
+
+func (d *Daemon) handleClipboardChannel(dc *webrtc.DataChannel) {
+	dc.OnMessage(func(data []byte) {
+		var msg protocol.Message
+		json.Unmarshal(data, &msg)
+		if msg.Type == protocol.MsgClipboard {
+			var clip protocol.ClipboardPayload
+			json.Unmarshal(msg.Payload, &clip)
+			// Sync clipboard
+		}
+	})
+}
+
+func (d *Daemon) handlePeerDisconnect(msg protocol.Message) {
+	var payload struct {
+		PeerID string `json:"peer_id"`
+	}
+	json.Unmarshal(msg.Payload, &payload)
+
+	d.mu.Lock()
+	for id, sess := range d.sessions {
+		if sess.ClientID == payload.PeerID {
+			if sess.PTYSess != nil {
+				sess.PTYSess.Close()
+			}
+			if sess.WebRTC != nil {
+				sess.WebRTC.Close()
+			}
+			delete(d.sessions, id)
+		}
+	}
+	d.mu.Unlock()
+
+	d.log.Info().Str("peer", payload.PeerID).Msg("Client disconnected")
+}
+
+func (d *Daemon) handleError(msg protocol.Message) {
+	var err protocol.ErrorPayload
+	json.Unmarshal(msg.Payload, &err)
+	d.log.Warn().Str("error", err.Message).Msg("Received error from signal server")
+}
+
+func (d *Daemon) getSession(roomID string) *Session {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.sessions[roomID]
+}
+
+func (d *Daemon) cleanup() {
+	d.log.Info().Msg("Cleaning up host daemon")
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	for id, sess := range d.sessions {
+		if sess.PTYSess != nil {
+			sess.PTYSess.Close()
+		}
+		if sess.WebRTC != nil {
+			sess.WebRTC.Close()
+		}
+		delete(d.sessions, id)
+	}
+
+	if d.signalConn != nil {
+		d.signalConn.Close()
+	}
 }

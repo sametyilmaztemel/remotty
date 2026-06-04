@@ -1,73 +1,172 @@
+// Package protocol defines all wire-format messages for remotyy signaling and data channels.
 package protocol
 
-// MessageType defines the type of signaling message.
+import "encoding/json"
+
+// ======== Message Types ========
+
 type MessageType string
 
 const (
-	// Host → Signal
-	MsgRegister    MessageType = "register"
-	MsgHeartbeat   MessageType = "heartbeat"
+	// Signaling: Host → Server
+	MsgRegister  MessageType = "register"
+	MsgHeartbeat MessageType = "heartbeat"
+	MsgUpdate    MessageType = "update" // host updates its capabilities
 
-	// Client → Signal
-	MsgRequestHost MessageType = "request_host"
+	// Signaling: Client → Server
+	MsgListHosts MessageType = "list_hosts"
+	MsgConnect   MessageType = "connect"
 
-	// Signal → Host/Client
-	MsgOffer       MessageType = "offer"
-	MsgAnswer      MessageType = "answer"
-	MsgICE         MessageType = "ice_candidate"
-	MsgApproved    MessageType = "approved"
-	MsgRejected    MessageType = "rejected"
-	MsgError       MessageType = "error"
+	// Signaling: Server → Peers
+	MsgHostList  MessageType = "host_list"
+	MsgRoomReady MessageType = "room_ready"
+	MsgPeerLeft  MessageType = "peer_left"
 
-	// Data channel messages (post-WebRTC)
-	MsgResize      MessageType = "resize"       // terminal resize
-	MsgInput       MessageType = "input"        // stdin
-	MsgOutput      MessageType = "output"       // stdout
-	MsgAuth        MessageType = "auth"         // master password
-	MsgAuthOK      MessageType = "auth_ok"
-	MsgAuthFail    MessageType = "auth_fail"
-	MsgPing        MessageType = "ping"
-	MsgPong        MessageType = "pong"
+	// WebRTC Negotiation (relayed through server)
+	MsgOffer      MessageType = "offer"
+	MsgAnswer     MessageType = "answer"
+	MsgICECandidate MessageType = "ice_candidate"
+	MsgRenegotiate MessageType = "renegotiate"
+
+	// Data Channel — Auth
+	MsgAuth     MessageType = "auth"
+	MsgAuthOK   MessageType = "auth_ok"
+	MsgAuthFail MessageType = "auth_fail"
+
+	// Data Channel — Terminal
+	MsgInput  MessageType = "input"
+	MsgOutput MessageType = "output"
+	MsgResize MessageType = "resize"
+
+	// Data Channel — Screen
+	MsgScreenStart MessageType = "screen_start"
+	MsgScreenStop  MessageType = "screen_stop"
+	MsgScreenFrame MessageType = "screen_frame"
+
+	// Data Channel — File Transfer
+	MsgFileRequest  MessageType = "file_request"
+	MsgFileAccept   MessageType = "file_accept"
+	MsgFileReject   MessageType = "file_reject"
+	MsgFileChunk    MessageType = "file_chunk"
+	MsgFileComplete MessageType = "file_complete"
+	MsgFileProgress MessageType = "file_progress"
+	MsgFileCancel   MessageType = "file_cancel"
+
+	// Data Channel — Clipboard
+	MsgClipboard MessageType = "clipboard"
+
+	// Data Channel — Keepalive
+	MsgPing MessageType = "ping"
+	MsgPong MessageType = "pong"
+
+	// Error
+	MsgError MessageType = "error"
 )
 
-// SignalMessage is the envelope for all signaling traffic.
-type SignalMessage struct {
-	Type    MessageType `json:"type"`
-	Payload interface{} `json:"payload,omitempty"`
-	From    string      `json:"from,omitempty"`
-	To      string      `json:"to,omitempty"`
-	Room    string      `json:"room,omitempty"`
+// ======== Envelope ========
+
+// Message is the envelope for all WebSocket and DataChannel messages.
+type Message struct {
+	Type    MessageType     `json:"type"`
+	Payload json.RawMessage `json:"payload,omitempty"`
+	From    string          `json:"from,omitempty"`
+	To      string          `json:"to,omitempty"`
+	Room    string          `json:"room,omitempty"`
+	ID      string          `json:"id,omitempty"` // message ID for dedup
+	Time    int64           `json:"time,omitempty"` // unix timestamp
 }
 
-// RegisterPayload is sent by the host on connect.
+// NewMessage creates a message with the given type and payload.
+func NewMessage(t MessageType, payload interface{}) Message {
+	data, _ := json.Marshal(payload)
+	return Message{
+		Type:    t,
+		Payload: data,
+	}
+}
+
+// ======== Payloads ========
+
+// RegisterPayload is sent by host on connect.
 type RegisterPayload struct {
-	Hostname    string   `json:"hostname"`
-	Platform    string   `json:"platform"`     // darwin, linux
-	Arch        string   `json:"arch"`         // arm64, amd64
-	Version     string   `json:"version"`
-	NeedsMaster bool     `json:"needs_master"` // is master password required?
-	Features    []string `json:"features"`     // "terminal", "screen"
+	Name      string   `json:"name"`
+	Platform  string   `json:"platform"`
+	Arch      string   `json:"arch"`
+	Version   string   `json:"version"`
+	Features  []string `json:"features"`
+	DeviceID  string   `json:"device_id,omitempty"`
 }
 
-// HostInfo describes a registered host for the client.
+// HostInfo describes a registered host.
 type HostInfo struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Platform    string   `json:"platform"`
-	Arch        string   `json:"arch"`
-	Version     string   `json:"version"`
-	Online      bool     `json:"online"`
-	NeedsMaster bool     `json:"needs_master"`
-	Features    []string `json:"features"`
+	ID        string   `json:"id"`
+	Name      string   `json:"name"`
+	Platform  string   `json:"platform"`
+	Arch      string   `json:"arch"`
+	Version   string   `json:"version"`
+	Online    bool     `json:"online"`
+	Features  []string `json:"features"`
+	DeviceID  string   `json:"device_id,omitempty"`
+	Ping      int      `json:"ping,omitempty"` // latency in ms
 }
 
-// AuthPayload is sent by the client to authenticate with master password.
+// ConnectPayload is sent by client to request a host connection.
+type ConnectPayload struct {
+	HostID   string `json:"host_id"`
+	Password string `json:"password,omitempty"`
+}
+
+// AuthPayload authenticates to a host session.
 type AuthPayload struct {
 	Password string `json:"password"`
 }
 
-// ResizePayload for terminal window size changes.
+// ResizePayload for terminal window changes.
 type ResizePayload struct {
 	Rows uint16 `json:"rows"`
 	Cols uint16 `json:"cols"`
+}
+
+// FileRequestPayload initiates a file transfer.
+type FileRequestPayload struct {
+	TransferID string `json:"transfer_id"`
+	Name       string `json:"name"`
+	Size       int64  `json:"size"`
+	MimeType   string `json:"mime_type"`
+	ChunkSize  int    `json:"chunk_size"`
+}
+
+// FileChunkPayload is a chunk of file data.
+type FileChunkPayload struct {
+	TransferID string `json:"transfer_id"`
+	Index      int    `json:"index"`
+	Data       []byte `json:"data"`
+	Checksum   string `json:"checksum,omitempty"` // SHA256 of chunk
+}
+
+// FileProgressPayload reports transfer progress.
+type FileProgressPayload struct {
+	TransferID string `json:"transfer_id"`
+	BytesSent  int64  `json:"bytes_sent"`
+	TotalBytes int64  `json:"total_bytes"`
+	Speed      int64  `json:"speed"` // bytes/sec
+}
+
+// ErrorPayload carries error details.
+type ErrorPayload struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+// ScreenConfigPayload configures screen sharing.
+type ScreenConfigPayload struct {
+	FPS          int  `json:"fps"`
+	Quality      int  `json:"quality"`
+	MaxDimension int  `json:"max_dimension"`
+	CaptureCursor bool `json:"capture_cursor"`
+}
+
+// ClipboardPayload carries clipboard contents.
+type ClipboardPayload struct {
+	Text string `json:"text"`
 }
