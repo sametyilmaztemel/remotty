@@ -2,73 +2,113 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var host: HostManager
-    @State private var localSignalURL: String = ""
-    @State private var localHostName: String = ""
-    @State private var localPassword: String = ""
-    @State private var launchAtLogin = false
-    @State private var showInMenuBar = true
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         TabView {
-            // Connection Settings
-            Form {
-                Section("Signaling Server") {
-                    TextField("URL", text: $localSignalURL)
+            generalTab
+                .tabItem {
+                    Label("General", systemImage: "gearshape")
+                }
+            
+            aboutTab
+                .tabItem {
+                    Label("About", systemImage: "info.circle")
+                }
+        }
+        .padding()
+        .frame(width: 420, height: 320)
+    }
+    
+    private var generalTab: some View {
+        Form {
+            Section("Connection") {
+                HStack {
+                    Text("Signal URL")
+                        .frame(width: 100, alignment: .leading)
+                    TextField("ws://host:port", text: $host.signalURL)
                         .fontDesign(.monospaced)
                         .textFieldStyle(.roundedBorder)
                 }
                 
-                Section("Host Identity") {
-                    TextField("Hostname", text: $localHostName)
+                HStack {
+                    Text("Hostname")
+                        .frame(width: 100, alignment: .leading)
+                    TextField("", text: $host.hostName)
                         .fontDesign(.monospaced)
                         .textFieldStyle(.roundedBorder)
                         .help("Leave empty to use system hostname")
                 }
-                
-                Section("Security") {
-                    SecureField("Master Password", text: $localPassword)
+            }
+            
+            Section("Security") {
+                HStack {
+                    Text("Master PW")
+                        .frame(width: 100, alignment: .leading)
+                    SecureField("Optional master password", text: $host.masterPassword)
                         .fontDesign(.monospaced)
                         .textFieldStyle(.roundedBorder)
                 }
-                
-                Section("Options") {
-                    Toggle("Launch at login", isOn: $launchAtLogin)
-                    Toggle("Show in menu bar", isOn: $showInMenuBar)
-                }
             }
-            .padding()
-            .tabItem {
-                Label("General", systemImage: "gearshape")
-            }
-            .onAppear {
-                localSignalURL = host.signalURL
-                localHostName = host.hostName
-                localPassword = host.masterPassword
-            }
-            .onChange(of: localSignalURL) { _, new in host.signalURL = new }
-            .onChange(of: localHostName) { _, new in host.hostName = new }
-            .onChange(of: localPassword) { _, new in host.masterPassword = new }
             
-            // About
-            VStack(spacing: 16) {
-                Image(systemName: "terminal.fill")
-                    .font(.system(size: 48))
-                    .foregroundColor(.accentColor)
-                Text("remotyy")
-                    .font(.title)
-                    .fontDesign(.monospaced)
-                Text("Version 0.3.0")
-                    .foregroundColor(.secondary)
-                Text("Remote terminal & screen access via WebRTC")
+            Section("Options") {
+                Toggle("Launch at login", isOn: $host.launchAtLogin)
+            }
+            
+            HStack {
+                Spacer()
+                Button("Done") {
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(.top, 8)
+        }
+    }
+    
+    private var aboutTab: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "terminal.fill")
+                .font(.system(size: 40))
+                .foregroundColor(.accentColor)
+            
+            Text("remotyy")
+                .font(.title2)
+                .fontDesign(.monospaced)
+                .fontWeight(.semibold)
+            
+            Text("Version 0.5.1")
+                .foregroundColor(.secondary)
+                .font(.caption)
+            
+            Text("Remote terminal & screen access via WebRTC")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            
+            Divider()
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Build Information")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                Spacer()
+                HStack {
+                    Text("Binary:")
+                        .foregroundColor(.secondary)
+                    Text(Bundle.main.executableURL?.lastPathComponent ?? "unknown")
+                        .fontDesign(.monospaced)
+                }
+                HStack {
+                    Text("Daemon:")
+                        .foregroundColor(.secondary)
+                    Text("remotyy \(host.hostName)")
+                        .fontDesign(.monospaced)
+                }
             }
-            .padding()
-            .tabItem {
-                Label("About", systemImage: "info.circle")
-            }
+            .font(.caption)
+            
+            Spacer()
         }
-        .frame(width: 450, height: 350)
+        .padding()
     }
 }

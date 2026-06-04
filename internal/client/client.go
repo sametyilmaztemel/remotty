@@ -139,7 +139,8 @@ func (c *Client) ConnectInteractive(ctx context.Context) error {
 	// The host sends the offer after we request connection
 	// For now, the host initiates the offer on MsgConnect
 
-	fmt.Println("\n🔗 Connected! Interactive terminal starting...")
+	fmt.Println("\n🔗 Connected! Starting interactive terminal...")
+	fmt.Println("   NOTE: Run in a real terminal for full TTY support.")
 	fmt.Println("Press Ctrl+Q to disconnect.")
 
 	// Terminal setup

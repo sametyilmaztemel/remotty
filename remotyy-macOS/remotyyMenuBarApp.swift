@@ -1,7 +1,10 @@
 import SwiftUI
 import OSLog
+import ServiceManagement
 
 let log = OSLog(subsystem: "com.remotyy.macos", category: "general")
+
+// MARK: - Application Entry Point
 
 @main
 struct remotyyApp: App {
@@ -16,8 +19,15 @@ struct remotyyApp: App {
                 .foregroundColor(host.isRunning ? .green : .gray)
         }
         .menuBarExtraStyle(.window)
+        
+        Settings {
+            SettingsView()
+                .environmentObject(host)
+        }
     }
 }
+
+// MARK: - Host Manager
 
 @MainActor
 class HostManager: ObservableObject {
@@ -30,18 +40,22 @@ class HostManager: ObservableObject {
         didSet { UserDefaults.standard.set(hostName, forKey: "hostName") }
     }
     @Published var masterPassword: String = ""
+    @Published var launchAtLogin: Bool = false {
+        didSet { updateLaunchAtLogin() }
+    }
     
     private var hostProcess: Process?
-    private let outputQueue = DispatchQueue(label: "com.remotyy.output", qos: .background)
+    private var healthTimer: Timer?
     
     init() {
         signalURL = UserDefaults.standard.string(forKey: "signalURL") ?? "ws://localhost:9000"
         hostName = UserDefaults.standard.string(forKey: "hostName") ?? ProcessInfo.processInfo.hostName
+        launchAtLogin = SMAppService.mainApp.status == .enabled
     }
     
     func startHost() {
         if isRunning {
-            statusMessage = "⚠️ Already running"
+            statusMessage = "Already running"
             return
         }
         
@@ -49,17 +63,17 @@ class HostManager: ObservableObject {
         let url = signalURL.trimmingCharacters(in: .whitespaces)
         
         guard !url.isEmpty, !name.isEmpty else {
-            statusMessage = "❌ Signal URL and hostname required"
+            statusMessage = "Signal URL and hostname required"
             return
         }
         
         guard let binaryPath = findBinary() else {
-            statusMessage = "❌ remotyy binary not found"
+            statusMessage = "remotyy binary not found. Build with: make build"
             os_log("Binary not found", log: log, type: .error)
             return
         }
         
-        os_log("Starting host: %{public}s --signal %{public}s --name %{public}s",
+        os_log("Starting: %{public}s --signal %{public}s --name %{public}s",
                log: log, type: .info, binaryPath, url, name)
         
         let process = Process()
@@ -71,31 +85,27 @@ class HostManager: ObservableObject {
         }
         process.currentDirectoryURL = URL(fileURLWithPath: NSHomeDirectory())
         
-        // Set up pipes for stdout/stderr (read async on background queue)
+        // Capturing stdout
         let outPipe = Pipe()
-        let errPipe = Pipe()
         process.standardOutput = outPipe
-        process.standardError = errPipe
-        
-        // Read stdout asynchronously
-        outPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+        outPipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
             if data.count > 0, let output = String(data: data, encoding: .utf8) {
-                os_log("host: %{public}s", log: log, type: .debug, output)
+                os_log("%{public}s", log: log, type: .debug, output.trimmingCharacters(in: .whitespacesAndNewlines))
             }
         }
         
-        // Read stderr asynchronously (errors from host)
+        // Capturing stderr
+        let errPipe = Pipe()
+        process.standardError = errPipe
         errPipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
             if data.count > 0, let output = String(data: data, encoding: .utf8) {
-                os_log("host error: %{public}s", log: log, type: .error, output)
+                os_log("stderr: %{public}s", log: log, type: .error, output.trimmingCharacters(in: .whitespacesAndNewlines))
             }
         }
         
-        // Handle process exit
         process.terminationHandler = { [weak self] proc in
-            // Clean up readability handlers
             outPipe.fileHandleForReading.readabilityHandler = nil
             errPipe.fileHandleForReading.readabilityHandler = nil
             
@@ -103,18 +113,19 @@ class HostManager: ObservableObject {
                 guard let self = self else { return }
                 self.isRunning = false
                 self.hostProcess = nil
+                self.healthTimer?.invalidate()
+                self.healthTimer = nil
+                
                 let status = proc.terminationStatus
                 if status == 0 {
-                    self.statusMessage = "⏹ Stopped"
+                    self.statusMessage = "Stopped"
                 } else {
-                    self.statusMessage = "🛑 Crashed (exit: \(status))"
-                    // Try to read any remaining output
-                    let remainingOut = String(data: outPipe.fileHandleForReading.availableData, encoding: .utf8) ?? ""
-                    let remainingErr = String(data: errPipe.fileHandleForReading.availableData, encoding: .utf8) ?? ""
-                    os_log("Host crashed. stdout: %{public}s stderr: %{public}s",
-                           log: log, type: .error, remainingOut, remainingErr)
+                    self.statusMessage = "Crashed (exit: \(status))"
+                    // Read remaining stderr
+                    let err = String(data: errPipe.fileHandleForReading.availableData, encoding: .utf8) ?? ""
+                    os_log("Crash stderr: %{public}s", log: log, type: .error, err)
                 }
-                os_log("Host exited with status %d", log: log, type: .info, status)
+                os_log("Host exit: %d", log: log, type: .info, status)
             }
         }
         
@@ -122,55 +133,78 @@ class HostManager: ObservableObject {
             try process.run()
             hostProcess = process
             isRunning = true
-            statusMessage = "✅ Running on \(name)"
-            os_log("Host PID: %d", log: log, type: .info, process.processIdentifier)
+            statusMessage = "Running — \(name)"
+            os_log("Host PID %d", log: log, type: .info, process.processIdentifier)
+            startHealthCheck()
         } catch {
-            statusMessage = "❌ Failed: \(error.localizedDescription)"
-            os_log("Failed to start: %{public}s", log: log, type: .error, error.localizedDescription)
+            statusMessage = "Failed: \(error.localizedDescription)"
+            os_log("Start failed: %{public}s", log: log, type: .error, error.localizedDescription)
         }
     }
     
     func stopHost() {
         guard let process = hostProcess, isRunning else { return }
-        os_log("Stopping host PID %d", log: log, type: .info, process.processIdentifier)
+        os_log("Stopping PID %d", log: log, type: .info, process.processIdentifier)
         process.terminate()
-        // Give it 3 seconds to terminate gracefully, then kill
+        // Force kill after grace period
         DispatchQueue.global().asyncAfter(deadline: .now() + 3) { [weak self] in
             guard let self = self, let proc = self.hostProcess, proc.isRunning else { return }
-            os_log("Force killing host PID %d", log: log, type: .error, proc.processIdentifier)
-            proc.terminate()
+            os_log("Force kill PID %d", log: log, type: .error, proc.processIdentifier)
+            kill(proc.processIdentifier, SIGKILL)
         }
         hostProcess = nil
         isRunning = false
-        statusMessage = "⏹ Stopped"
+        healthTimer?.invalidate()
+        healthTimer = nil
+        statusMessage = "Stopped"
+    }
+    
+    private func startHealthCheck() {
+        healthTimer?.invalidate()
+        healthTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            guard let self = self, let proc = self.hostProcess else { return }
+            if !proc.isRunning {
+                Task { @MainActor in
+                    self.isRunning = false
+                    self.statusMessage = "Process ended"
+                }
+            }
+        }
     }
     
     private func findBinary() -> String? {
-        // Use Bundle first (bundled inside .app)
+        // Bundled in .app
         if let bundled = Bundle.main.path(forResource: "remotyyd", ofType: nil) {
-            if FileManager.default.fileExists(atPath: bundled) {
-                return bundled
-            }
+            if FileManager.default.fileExists(atPath: bundled) { return bundled }
         }
         if let bundled = Bundle.main.path(forResource: "remotyy", ofType: nil) {
-            if FileManager.default.fileExists(atPath: bundled) {
-                return bundled
-            }
+            if FileManager.default.fileExists(atPath: bundled) { return bundled }
         }
-        // Fallback to PATH
+        // PATH
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/which")
         task.arguments = ["remotyy"]
-        let pipe = Pipe()
-        task.standardOutput = pipe
+        let p = Pipe()
+        task.standardOutput = p
         try? task.run()
         task.waitUntilExit()
         if task.terminationStatus == 0 {
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty {
-                return path
-            }
+            let data = p.fileHandleForReading.readDataToEndOfFile()
+            let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !path.isEmpty { return path }
         }
         return nil
+    }
+    
+    private func updateLaunchAtLogin() {
+        do {
+            if launchAtLogin {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch {
+            os_log("Launch at login failed: %{public}s", log: log, type: .error, error.localizedDescription)
+        }
     }
 }
