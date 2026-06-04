@@ -1,20 +1,21 @@
 import Cocoa
 import Combine
-import SwiftUI
+import OSLog
 
-// MARK: - AppDelegate
+let Log = OSLog(subsystem: "com.remotyy.macos", category: "general")
 
 @MainActor
-public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
-
-    public var statusItem: NSStatusItem!
+public final class AppDelegate: NSObject, NSApplicationDelegate {
     public let hostManager = HostManager()
+    private var statusItem: NSStatusItem!
     private var cancellables = Set<AnyCancellable>()
 
-    // MARK: Application Lifecycle
-
     public func applicationDidFinishLaunching(_ notification: Notification) {
-        setupStatusItem()
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        guard let button = statusItem.button else { return }
+
+        // Set the image on the status item button
+        updateIcon()
 
         // Observe host state for dynamic icon
         hostManager.$isRunning
@@ -23,156 +24,92 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
             .store(in: &cancellables)
     }
 
-    // MARK: Status Item
-
-    private func setupStatusItem() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    private func updateIcon() {
         guard let button = statusItem.button else { return }
-
-        button.image = NSImage(systemSymbolName: "terminal.fill", accessibilityDescription: "remotyy")
-        button.action = #selector(handleClick)
-        // Both left-click and right-click trigger the same handler
-        button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-
-        updateIcon()
-    }
-
-    public func updateIcon() {
-        guard let button = statusItem.button else { return }
+        let img = NSImage(systemSymbolName: "terminal.fill", accessibilityDescription: "remotyy")
         let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
-        let image = NSImage(systemSymbolName: "terminal.fill", accessibilityDescription: "remotyy")?
-            .withSymbolConfiguration(config)
-        button.image = image
-        // Green tint when running, labelColor (adaptive) when stopped
-        button.contentTintColor = hostManager.isRunning ? .systemGreen : .labelColor
+        button.image = img?.withSymbolConfiguration(config)
+        button.contentTintColor = hostManager.isRunning ? .systemGreen : .controlTextColor
+        // Remove any old menu reference so the click handler fires
+        statusItem.menu = nil
+        button.target = self
+        button.action = #selector(handleClick)
+        button.sendAction(on: [.leftMouseUp, .rightMouseUp])
     }
-
-    // MARK: Click Handling
 
     @objc private func handleClick() {
-        guard let button = statusItem.button else { return }
-        let menu = buildMenu()
-        menu.delegate = self
-        // Show menu positioned below the status item button
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 5), in: button)
+        statusItem.menu = buildMenu()
+        // performClick triggers the menu display via the status item's menu
+        statusItem.button?.performClick(nil)
     }
 
-    public func menuDidClose(_ menu: NSMenu) {
-        // No cleanup needed — we rebuild the menu fresh each time
+    public func menuDidClose(_: NSMenu) {
+        statusItem.menu = nil
     }
-
-    // MARK: Menu Building
 
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
+        menu.delegate = self
 
-        // ── Status header ──
-        let statusTitle = hostManager.isRunning ? "\u{25CF}  Running" : "\u{25CB}  Stopped"
-        let statusAttr: [NSAttributedString.Key: Any] = [
+        // Status header
+        let statusItem = NSMenuItem()
+        let attrs: [NSAttributedString.Key: Any] = [
             .foregroundColor: hostManager.isRunning ? NSColor.systemGreen : NSColor.secondaryLabelColor,
             .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold),
         ]
-        let statusItem = NSMenuItem()
-        statusItem.attributedTitle = NSAttributedString(string: statusTitle, attributes: statusAttr)
+        statusItem.attributedTitle = NSAttributedString(
+            string: hostManager.isRunning ? "\u{25CF}  Running" : "\u{25CB}  Stopped",
+            attributes: attrs
+        )
         statusItem.isEnabled = false
         menu.addItem(statusItem)
+        menu.addItem(.separator())
 
-        // ── Start / Stop Host ──
-        if hostManager.isRunning {
-            let stopItem = NSMenuItem(
-                title: "Stop Host",
-                action: #selector(toggleHost),
-                keyEquivalent: ""
-            )
-            stopItem.target = self
-            stopItem.image = NSImage(systemSymbolName: "stop.fill", accessibilityDescription: nil)
-            menu.addItem(stopItem)
-        } else {
-            let startItem = NSMenuItem(
-                title: "Start Host",
-                action: #selector(toggleHost),
-                keyEquivalent: ""
-            )
-            startItem.target = self
-            startItem.image = NSImage(systemSymbolName: "play.fill", accessibilityDescription: nil)
-            menu.addItem(startItem)
-        }
+        // Start / Stop Host
+        let toggleTitle = hostManager.isRunning ? "Stop Host" : "Start Host"
+        let toggleItem = NSMenuItem(title: toggleTitle, action: #selector(toggleHost), keyEquivalent: "h")
+        toggleItem.target = self
+        toggleItem.keyEquivalentModifierMask = [.command, .control]
+        menu.addItem(toggleItem)
 
-        menu.addItem(NSMenuItem.separator())
+        menu.addItem(.separator())
 
-        // ── Open Web UI ──
-        let webItem = NSMenuItem(
-            title: "Open Web UI",
-            action: #selector(openWebUI),
-            keyEquivalent: "w"
-        )
+        // Open Web UI
+        let webItem = NSMenuItem(title: "Open Web UI", action: #selector(openWebUI), keyEquivalent: "w")
         webItem.target = self
         webItem.keyEquivalentModifierMask = [.command, .control]
-        webItem.image = NSImage(systemSymbolName: "safari", accessibilityDescription: nil)
         webItem.isEnabled = hostManager.isRunning
         menu.addItem(webItem)
 
-        // ── Screen Sharing ──
-        if hostManager.screenSharing {
-            let stopScreenItem = NSMenuItem(
-                title: "Stop Screen Sharing",
-                action: #selector(toggleScreenShare),
-                keyEquivalent: ""
-            )
-            stopScreenItem.target = self
-            stopScreenItem.image = NSImage(systemSymbolName: "stop.circle", accessibilityDescription: nil)
-            stopScreenItem.isEnabled = hostManager.isRunning
-            menu.addItem(stopScreenItem)
-        } else {
-            let startScreenItem = NSMenuItem(
-                title: "Start Screen Sharing",
-                action: #selector(toggleScreenShare),
-                keyEquivalent: ""
-            )
-            startScreenItem.target = self
-            startScreenItem.image = NSImage(
-                systemSymbolName: "rectangle.connected.to.line.below",
-                accessibilityDescription: nil
-            )
-            startScreenItem.isEnabled = hostManager.isRunning
-            menu.addItem(startScreenItem)
-        }
+        // Screen Sharing
+        let screenTitle = hostManager.screenSharing ? "Stop Screen Sharing" : "Start Screen Sharing"
+        let screenItem = NSMenuItem(title: screenTitle, action: #selector(toggleScreenShare), keyEquivalent: "s")
+        screenItem.target = self
+        screenItem.keyEquivalentModifierMask = [.command, .control]
+        screenItem.isEnabled = hostManager.isRunning
+        menu.addItem(screenItem)
 
-        menu.addItem(NSMenuItem.separator())
+        menu.addItem(.separator())
 
-        // ── Settings ──
-        let settingsItem = NSMenuItem(
-            title: "Settings\u{2026}",
-            action: #selector(openSettings),
-            keyEquivalent: ","
-        )
+        // Settings
+        let settingsItem = NSMenuItem(title: "Settings\u{2026}", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
-        settingsItem.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)
         menu.addItem(settingsItem)
 
-        // ── Quit ──
-        let quitItem = NSMenuItem(
-            title: "Quit remotyy",
-            action: #selector(quitApp),
-            keyEquivalent: "q"
-        )
+        // Quit
+        let quitItem = NSMenuItem(title: "Quit remotyy", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
-        quitItem.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: nil)
         menu.addItem(quitItem)
 
         return menu
     }
 
-    // MARK: Actions
+    // MARK: - Actions
 
     @objc func toggleHost() {
-        if hostManager.isRunning {
-            hostManager.stopHost()
-        } else {
-            hostManager.startHost()
-        }
-        // Icon update handled by Combine observer
+        if hostManager.isRunning { hostManager.stopHost() }
+        else { hostManager.startHost() }
     }
 
     @objc func openWebUI() {
@@ -185,11 +122,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate 
     }
 
     @objc func openSettings() {
-        // Opens SwiftUI Settings scene registered in remotyyApp
         NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
     }
 
     @objc func quitApp() {
+        hostManager.stopHost()
         NSApp.terminate(nil)
     }
 }

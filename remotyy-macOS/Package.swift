@@ -26,7 +26,6 @@ let package = Package(
             sources: [
                 "AppDelegate.swift",
                 "HostManager.swift",
-                "MenuBarView.swift",
                 "SettingsView.swift",
                 "QRHostView.swift",
             ],
