@@ -159,6 +159,16 @@ private struct ActionButtons: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
+                    
+                    Button(action: {
+                        if let url = URL(string: "http://localhost:3000") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }) {
+                        Label("Web UI", systemImage: "safari")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
                 }
                 
                 Button(action: { showSettings = true }) {

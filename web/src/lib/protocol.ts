@@ -63,3 +63,41 @@ export interface FileProgressPayload {
   total_bytes: number;
   speed: number;
 }
+
+// ─── Screen Share (Data Channel) ─────────────────
+
+export interface ScreenFramePayload {
+  width: number;
+  height: number;
+  data: string; // base64-encoded JPEG bytes
+}
+
+export interface MouseMovePayload {
+  x: number;
+  y: number;
+}
+
+export interface MouseClickPayload {
+  button: number;
+  x: number;
+  y: number;
+  down: boolean;
+}
+
+export interface MouseScrollPayload {
+  delta_x: number;
+  delta_y: number;
+}
+
+export interface KeyPressPayload {
+  key_code: number;
+  chars: string;
+  down: boolean;
+}
+
+export type ScreenDCMessage =
+  | { type: 'screen_frame'; payload: ScreenFramePayload }
+  | { type: 'mouse_move'; payload: MouseMovePayload }
+  | { type: 'mouse_click'; payload: MouseClickPayload }
+  | { type: 'mouse_scroll'; payload: MouseScrollPayload }
+  | { type: 'key_press'; payload: KeyPressPayload };

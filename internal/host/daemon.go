@@ -5,6 +5,7 @@ package host
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"github.com/sametyilmaztemel/remotyy/internal/config"
 	"github.com/sametyilmaztemel/remotyy/internal/protocol"
 	"github.com/sametyilmaztemel/remotyy/internal/pty"
+	"github.com/sametyilmaztemel/remotyy/internal/screen"
 	"github.com/sametyilmaztemel/remotyy/internal/webrtc"
 )
 
@@ -36,13 +38,14 @@ type Daemon struct {
 
 // Session tracks an active client connection.
 type Session struct {
-	ID        string
-	ClientID  string
-	RoomID    string
-	WebRTC    *webrtc.Engine
-	PTYSess   *pty.Session
-	CreatedAt time.Time
-	Authed    bool
+	ID             string
+	ClientID       string
+	RoomID         string
+	WebRTC         *webrtc.Engine
+	PTYSess        *pty.Session
+	ScreenStreamer *screen.Streamer
+	CreatedAt      time.Time
+	Authed         bool
 }
 
 // NewDaemon creates a new host daemon.
@@ -377,8 +380,151 @@ func (d *Daemon) handleTerminalChannel(session *Session, dc *webrtc.DataChannel)
 }
 
 func (d *Daemon) handleScreenChannel(session *Session, dc *webrtc.DataChannel) {
-	// Screen sharing — handled via WebRTC video track
-	// Control messages via data channel
+	if !session.Authed {
+		dc.SendJSON(protocol.NewMessage(protocol.MsgError, "Not authenticated"))
+		return
+	}
+
+	dc.OnMessage(func(data []byte) {
+		var msg protocol.Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return
+		}
+
+		switch msg.Type {
+		case protocol.MsgScreenStart:
+			// Stop any existing streamer first
+			if session.ScreenStreamer != nil {
+				session.ScreenStreamer.Stop()
+				session.ScreenStreamer = nil
+			}
+
+			var cfg protocol.ScreenConfigPayload
+			if msg.Payload != nil {
+				json.Unmarshal(msg.Payload, &cfg)
+			}
+
+			streamCfg := screen.DefaultStreamConfig()
+			if cfg.FPS > 0 {
+				streamCfg.FPS = cfg.FPS
+			}
+			if cfg.Quality > 0 {
+				streamCfg.Quality = cfg.Quality
+			}
+			if cfg.MaxDimension > 0 {
+				streamCfg.MaxWidth = cfg.MaxDimension
+				streamCfg.MaxHeight = cfg.MaxDimension
+			}
+
+			var streamer *screen.Streamer
+			var err error
+			streamer, err = screen.NewStreamer(streamCfg, func(frameData []byte, width, height int, _ time.Time, _ time.Duration) bool {
+				// Only send if this streamer is still the active one
+				if session.ScreenStreamer != streamer {
+					return false
+				}
+
+				// Base64-encode JPEG data for JSON transport
+				encoded := base64.StdEncoding.EncodeToString(frameData)
+				framePayload := map[string]interface{}{
+					"width":  width,
+					"height": height,
+					"data":   encoded,
+				}
+				frameMsg := protocol.NewMessage(protocol.MsgScreenFrame, framePayload)
+				if err := dc.SendJSON(frameMsg); err != nil {
+					d.log.Warn().Err(err).Msg("Failed to send screen frame")
+					return false
+				}
+				return true
+			})
+			if err != nil {
+				d.log.Error().Err(err).Msg("Failed to create screen streamer")
+				dc.SendJSON(protocol.NewMessage(protocol.MsgError, "Failed to start screen capture"))
+				return
+			}
+
+			session.ScreenStreamer = streamer
+			if err := streamer.StartAsync(); err != nil {
+				d.log.Error().Err(err).Msg("Failed to start screen streamer")
+				session.ScreenStreamer = nil
+				dc.SendJSON(protocol.NewMessage(protocol.MsgError, "Failed to start screen capture"))
+				return
+			}
+
+			d.log.Info().Msg("Screen sharing started")
+
+		case protocol.MsgScreenStop:
+			if session.ScreenStreamer != nil {
+				session.ScreenStreamer.Stop()
+				session.ScreenStreamer = nil
+				d.log.Info().Msg("Screen sharing stopped")
+			}
+
+		case protocol.MsgMouseMove:
+			var payload protocol.MouseMovePayload
+			if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+				return
+			}
+			if err := screen.MouseMove(payload.X, payload.Y); err != nil {
+				d.log.Warn().Err(err).Msg("MouseMove failed")
+			}
+
+		case protocol.MsgMouseClick:
+			var payload protocol.MouseClickPayload
+			if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+				return
+			}
+			if payload.Down {
+				if err := screen.MouseButtonDown(payload.Button, payload.X, payload.Y); err != nil {
+					d.log.Warn().Err(err).Msg("MouseButtonDown failed")
+				}
+			} else {
+				if err := screen.MouseButtonUp(payload.Button, payload.X, payload.Y); err != nil {
+					d.log.Warn().Err(err).Msg("MouseButtonUp failed")
+				}
+			}
+
+		case protocol.MsgMouseScroll:
+			var payload protocol.MouseScrollPayload
+			if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+				return
+			}
+			if err := screen.MouseScroll(payload.DeltaX, payload.DeltaY); err != nil {
+				d.log.Warn().Err(err).Msg("MouseScroll failed")
+			}
+
+		case protocol.MsgKeyPress:
+			var payload protocol.KeyPayload
+			if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+				return
+			}
+			if payload.Chars != "" {
+				// Send each character as a key press
+				for _, ch := range payload.Chars {
+					keyCode := screen.StringToKeyCode(string(ch))
+					if keyCode != 0 {
+						if err := screen.KeyPress(keyCode); err != nil {
+							d.log.Warn().Err(err).Msg("KeyPress failed for char")
+						}
+					}
+				}
+			} else if payload.KeyCode != 0 {
+				if err := screen.KeyPress(payload.KeyCode); err != nil {
+					d.log.Warn().Err(err).Msg("KeyPress failed")
+				}
+			}
+
+		case protocol.MsgKeyRelease:
+			var payload protocol.KeyPayload
+			if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+				return
+			}
+			if err := screen.KeyRelease(payload.KeyCode); err != nil {
+				d.log.Warn().Err(err).Msg("KeyRelease failed")
+			}
+		}
+	})
 }
 
 func (d *Daemon) handleFileChannel(session *Session, dc *webrtc.DataChannel) {
@@ -408,6 +554,9 @@ func (d *Daemon) handlePeerDisconnect(msg protocol.Message) {
 		if sess.ClientID == payload.PeerID {
 			if sess.PTYSess != nil {
 				sess.PTYSess.Close()
+			}
+			if sess.ScreenStreamer != nil {
+				sess.ScreenStreamer.Stop()
 			}
 			if sess.WebRTC != nil {
 				sess.WebRTC.Close()
@@ -441,6 +590,9 @@ func (d *Daemon) cleanup() {
 	for id, sess := range d.sessions {
 		if sess.PTYSess != nil {
 			sess.PTYSess.Close()
+		}
+		if sess.ScreenStreamer != nil {
+			sess.ScreenStreamer.Stop()
 		}
 		if sess.WebRTC != nil {
 			sess.WebRTC.Close()
