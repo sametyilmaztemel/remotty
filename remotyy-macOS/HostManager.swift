@@ -6,7 +6,6 @@ let Log = OSLog(subsystem: "com.remotyy.macos", category: "general")
 
 // MARK: - HostManager
 
-@MainActor
 public class HostManager: ObservableObject {
     @Published public internal(set) var isRunning = false
     @Published public internal(set) var statusMessage = "Ready"
@@ -33,7 +32,7 @@ public class HostManager: ObservableObject {
 
     // MARK: - Host Lifecycle
 
-    func startHost() {
+    public func startHost() {
         guard !isRunning else { return }
 
         let name = hostName.trimmed.isEmpty
@@ -100,7 +99,7 @@ public class HostManager: ObservableObject {
             statusMessage = "Running \u{2014} \(name)"
             healthTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
                 guard let self = self, let p = self.hostProcess, !p.isRunning else { return }
-                Task { @MainActor in
+                Task {
                     self.isRunning = false
                     self.statusMessage = "Process ended"
                 }
@@ -110,7 +109,7 @@ public class HostManager: ObservableObject {
         }
     }
 
-    func stopHost() {
+    public func stopHost() {
         guard let p = hostProcess, isRunning else { return }
         p.terminate()
         DispatchQueue.global().asyncAfter(deadline: .now() + 3) { [weak self] in
@@ -126,7 +125,7 @@ public class HostManager: ObservableObject {
 
     // MARK: - Screen Sharing
 
-    func toggleScreenShare() {
+    public func toggleScreenShare() {
         if screenSharing {
             stopScreenShare()
         } else {
