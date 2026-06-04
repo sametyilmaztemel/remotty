@@ -7,9 +7,12 @@ export type MessageType =
   | 'offer' | 'answer' | 'ice_candidate'
   | 'auth' | 'auth_ok' | 'auth_fail'
   | 'input' | 'output' | 'resize'
-  | 'screen_start' | 'screen_stop'
+  | 'screen_start' | 'screen_stop' | 'screen_frame' | 'screen_resize'
+  | 'mouse_move' | 'mouse_click' | 'mouse_scroll'
+  | 'key_press' | 'key_release'
   | 'file_request' | 'file_accept' | 'file_reject'
   | 'file_chunk' | 'file_complete' | 'file_progress'
+  | 'file_cancel'
   | 'clipboard'
   | 'ping' | 'pong'
   | 'error';

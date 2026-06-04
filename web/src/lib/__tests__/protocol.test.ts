@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { Message, HostInfo, ResizePayload, FileRequestPayload } from '../lib/protocol';
+import type { Message, HostInfo, ResizePayload, FileRequestPayload } from '../protocol';
 
 describe('protocol types', () => {
   it('Message has required type field', () => {

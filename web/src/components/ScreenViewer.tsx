@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSignaling } from '../hooks/useSignaling';
 import { useWebRTC } from '../hooks/useWebRTC';
-import type { HostInfo, ScreenDCMessage } from '../lib/protocol';
+import type { HostInfo, ScreenDCMessage, Message } from '../lib/protocol';
 
 interface Props {
   host: HostInfo;
@@ -27,6 +27,7 @@ export default function ScreenViewer({ host }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
+  const authDcRef = useRef<RTCDataChannel | null>(null);
   const frameCountRef = useRef(0);
   const lastFpsTimeRef = useRef(performance.now());
   const fpsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -38,6 +39,7 @@ export default function ScreenViewer({ host }: Props) {
   const zoomRef = useRef(1);
   const roomRef = useRef(`screen-${host.id}-${Date.now()}`);
   const mountedRef = useRef(true);
+  const signalHandlersRef = useRef<Array<{ type: string; handler: (msg: Message) => void }>>([]);
 
   // ── State ─────────────────────────────────────
   const [active, setActive] = useState(false);
@@ -47,6 +49,15 @@ export default function ScreenViewer({ host }: Props) {
   const [zoom, setZoom] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [screenResolution, setScreenResolution] = useState({ width: 0, height: 0 });
+
+  // ── Cleanup signal handlers ───────────────────
+  const cleanupSignalHandlers = useCallback(() => {
+    if (!client) return;
+    for (const { type, handler } of signalHandlersRef.current) {
+      client.off(type as any, handler);
+    }
+    signalHandlersRef.current = [];
+  }, [client]);
 
   // ── WebRTC Hook ───────────────────────────────
   const webrtc = useWebRTC({
@@ -180,45 +191,195 @@ export default function ScreenViewer({ host }: Props) {
     };
   }, []);
 
+  // ── Wait for room_ready ───────────────────────
+  const waitForRoomReady = useCallback((): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      let cleanedUp = false;
+      const cleanup = () => {
+        if (cleanedUp) return;
+        cleanedUp = true;
+        clearTimeout(timeoutId);
+        client?.off('room_ready', roomHandler);
+        client?.off('error', errorHandler);
+        signalHandlersRef.current = signalHandlersRef.current.filter(
+          (h) => h.handler !== roomHandler && h.handler !== errorHandler,
+        );
+      };
+
+      const roomHandler = (msg: Message) => {
+        cleanup();
+        const payload = msg.payload as { room?: string };
+        if (payload?.room) {
+          resolve(payload.room);
+        } else {
+          reject(new Error('room_ready missing room field'));
+        }
+      };
+      const errorHandler = (msg: Message) => {
+        cleanup();
+        const payload = msg.payload as { message?: string };
+        reject(new Error(payload?.message || 'Connection rejected'));
+      };
+      const timeoutId = setTimeout(() => {
+        cleanup();
+        reject(new Error('Timeout waiting for room_ready'));
+      }, 15000);
+
+      client?.on('room_ready', roomHandler);
+      client?.on('error', errorHandler);
+      signalHandlersRef.current.push(
+        { type: 'room_ready', handler: roomHandler },
+        { type: 'error', handler: errorHandler },
+      );
+    });
+  }, [client]);
+
+  // ── Authenticate via data channel ──────────────
+  const authenticate = useCallback((): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const pc = webrtc.rtc.current;
+      if (!pc) {
+        reject(new Error('No peer connection'));
+        return;
+      }
+
+      const authDc = pc.createDataChannel('auth');
+      if (!authDc) {
+        reject(new Error('Failed to create auth data channel'));
+        return;
+      }
+      authDcRef.current = authDc;
+
+      const authTimeout = setTimeout(() => {
+        reject(new Error('Auth timeout'));
+      }, 10000);
+
+      authDc.onopen = () => {
+        // Send auth message
+        authDc.send(JSON.stringify({
+          type: 'auth',
+          payload: { password: '' },
+        }));
+      };
+
+      authDc.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(
+            typeof event.data === 'string'
+              ? event.data
+              : new TextDecoder().decode(event.data as ArrayBuffer),
+          );
+          if (msg.type === 'auth_ok') {
+            clearTimeout(authTimeout);
+            resolve();
+          } else if (msg.type === 'auth_fail') {
+            clearTimeout(authTimeout);
+            reject(new Error('Authentication failed'));
+          }
+        } catch (e) {
+          // Ignore parse errors on auth channel
+        }
+      };
+
+      authDc.onerror = () => {
+        clearTimeout(authTimeout);
+        reject(new Error('Auth data channel error'));
+      };
+    });
+  }, [webrtc.rtc]);
+
   // ── Start / Stop ──────────────────────────────
   const startScreenShare = useCallback(async () => {
     try {
       setStatus('connecting');
       setActive(true);
+      cleanupSignalHandlers();
 
-      // Init WebRTC as offerer
-      await webrtc.init(true);
+      // Step 1: Init WebRTC as non-offerer (host creates offer)
+      await webrtc.init(false);
 
       if (!mountedRef.current) return;
 
-      // Create the screen data channel
-      const dc = webrtc.rtc.current?.createDataChannel('screen');
-      if (dc) {
-        setupDataChannel(dc);
-        dcRef.current = dc;
-      } else {
-        throw new Error('Failed to create screen data channel');
-      }
+      // Step 2: Send connect to signaling server to create a room with the host
+      client?.send({ type: 'connect', payload: { host_id: host.id } });
 
-      // Notify the host to start screen capture
+      // Step 3: Wait for room_ready from signaling server
+      const roomId = await waitForRoomReady();
+      roomRef.current = roomId;
+
+      if (!mountedRef.current) return;
+
+      // Step 4: Wait for WebRTC to reach 'connected' state
       setStatus('starting');
-      client?.send({ type: 'screen_start', room: roomRef.current });
+
+      // Step 5: Authenticate via auth data channel
+      await authenticate();
+
+      if (!mountedRef.current) return;
+
+      // Step 6: Create the screen data channel
+      const pc = webrtc.rtc.current;
+      if (!pc) throw new Error('No peer connection for screen channel');
+
+      // createDataChannel triggers onDataChannel callback which calls
+      // setupDataChannel — but we override handlers below for the initial flow
+      const dc = pc.createDataChannel('screen');
+      if (!dc) throw new Error('Failed to create screen data channel');
+      dcRef.current = dc;
+
+      // Step 7: Wait for screen data channel to open, then send screen_start
+      await new Promise<void>((resolve, reject) => {
+        const screenTimeout = setTimeout(() => {
+          reject(new Error('Screen data channel timeout'));
+        }, 15000);
+
+        dc.binaryType = 'arraybuffer';
+        dc.onmessage = handleScreenMessage;
+        dc.onopen = () => {
+          clearTimeout(screenTimeout);
+          // Send screen_start over the data channel
+          dc.send(JSON.stringify({ type: 'screen_start' }));
+          setConnectionStatus('connected');
+          setStatus('connected');
+          resolve();
+        };
+        dc.onclose = () => {
+          setConnectionStatus('disconnected');
+          if (mountedRef.current) setStatus('disconnected');
+        };
+        dc.onerror = (err) => {
+          clearTimeout(screenTimeout);
+          console.error('[ScreenViewer] Data channel error:', err);
+          setConnectionStatus('error');
+          reject(new Error('Screen data channel error'));
+        };
+      });
     } catch (err) {
       console.error('[ScreenViewer] Failed to start:', err);
       setStatus('error');
       setActive(false);
+      cleanupSignalHandlers();
       webrtc.close();
     }
-  }, [webrtc, client, setupDataChannel]);
+  }, [webrtc, client, host.id, waitForRoomReady, authenticate, cleanupSignalHandlers]);
 
   const stopScreenShare = useCallback(() => {
     try {
       setStatus('stopping');
-      client?.send({ type: 'screen_stop' });
+      // Send screen_stop over data channel if open
+      if (dcRef.current?.readyState === 'open') {
+        dcRef.current.send(JSON.stringify({ type: 'screen_stop' }));
+      }
+      // Close auth data channel
+      if (authDcRef.current) {
+        authDcRef.current.close();
+        authDcRef.current = null;
+      }
     } catch (err) {
       console.error('[ScreenViewer] Error sending stop:', err);
     }
 
+    cleanupSignalHandlers();
     webrtc.close();
     dcRef.current = null;
 
@@ -241,7 +402,7 @@ export default function ScreenViewer({ host }: Props) {
       setFpsDisplay(0);
       setScreenResolution({ width: 0, height: 0 });
     }
-  }, [webrtc, client]);
+  }, [webrtc, cleanupSignalHandlers]);
 
   // ── Send Helpers ──────────────────────────────
   const sendOverDC = useCallback((msg: ScreenDCMessage) => {
@@ -465,10 +626,12 @@ export default function ScreenViewer({ host }: Props) {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      cleanupSignalHandlers();
       dcRef.current = null;
+      authDcRef.current = null;
       webrtc.close();
     };
-  }, [webrtc]);
+  }, [webrtc, cleanupSignalHandlers]);
 
   // ── Status label helpers ──────────────────────
   const statusLabel = {

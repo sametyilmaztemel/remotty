@@ -31,7 +31,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let img = NSImage(systemSymbolName: name, accessibilityDescription: "remotyy")
         let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
         b.image = img?.withSymbolConfiguration(config)
-        b.contentTintColor = host.isRunning ? .systemGreen : .labelColor
     }
 
     // MARK: - Menu

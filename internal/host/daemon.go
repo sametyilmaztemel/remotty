@@ -72,6 +72,9 @@ func NewDaemon(cfg config.HostConfig, log zerolog.Logger) (*Daemon, error) {
 	}
 	if cfg.Features == nil {
 		cfg.Features = []string{"terminal"}
+		if runtime.GOOS == "darwin" {
+			cfg.Features = append(cfg.Features, "screen")
+		}
 	}
 	if cfg.ReconnectWait == 0 {
 		cfg.ReconnectWait = 5 * time.Second
