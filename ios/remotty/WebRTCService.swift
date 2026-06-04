@@ -385,8 +385,8 @@ final class WebRTCService: NSObject, ObservableObject {
         }
         pendingCandidates.removeAll()
 
-        // Send connect request now that we're ready for the offer
-        sendConnectRequest()
+        // Connect request was already sent in didOpenWithProtocol
+        log("[WebRTC] Peer connection factory initialised, waiting for offer")
     }
 
     private func sendConnectRequest() {
@@ -446,6 +446,9 @@ final class WebRTCService: NSObject, ObservableObject {
                         self.updateState(.error("setLocalDescription(answer): \(error.localizedDescription)"))
                         return
                     }
+
+                    // Create data channels now that local description is set
+                    self.setupDataChannels()
 
                     // Send answer via signaling
                     let answerPayload: [String: Any] = [
@@ -508,7 +511,7 @@ final class WebRTCService: NSObject, ObservableObject {
             let config = RTCDataChannelConfiguration()
             config.isOrdered = true
             config.isNegotiated = false
-            config.channelId = channelId(for: label)
+            // No explicit channelId — WebRTC assigns dynamically when isNegotiated is false
 
             if let channel = peerConnection?.dataChannel(forLabel: label.rawValue, configuration: config) {
                 channel.delegate = self
@@ -524,15 +527,6 @@ final class WebRTCService: NSObject, ObservableObject {
 
         // Request screen sharing start
         requestScreenStart()
-    }
-
-    private func channelId(for label: DataChannelLabel) -> Int {
-        switch label {
-        case .terminal: return 0
-        case .screen:   return 1
-        case .auth:     return 2
-        case .file:     return 3
-        }
     }
 
     // MARK: Screen frame handling
@@ -616,6 +610,8 @@ extension WebRTCService: URLSessionWebSocketDelegate {
     ) {
         webSocketConnected = true
         log("[WebRTC] WebSocket connected (protocol: \(`protocol` ?? "none"))")
+        // Send connect request immediately — don't wait for room_ready
+        sendConnectRequest()
     }
 
     func urlSession(
