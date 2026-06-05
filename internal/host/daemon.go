@@ -356,6 +356,16 @@ func (d *Daemon) handleConnectRequest(msg protocol.Message) {
 	offerMsg := protocol.NewMessage(protocol.MsgOffer, offer)
 	offerMsg.Room = payload.Room
 	d.signalConn.WriteJSON(offerMsg)
+
+	// Create data channels so the client can receive them via OnDataChannel
+	// These are negotiated in-band after the WebRTC connection establishes.
+	engine.CreateDataChannel(webrtc.DataChannelAuth)
+	engine.CreateDataChannel(webrtc.DataChannelTerminal)
+	engine.CreateDataChannel(webrtc.DataChannelScreen)
+	engine.CreateDataChannel(webrtc.DataChannelTransfer)
+	engine.CreateDataChannel(webrtc.DataChannelClipboard)
+	engine.CreateDataChannel(webrtc.DataChannelFile)
+	d.log.Debug().Str("room", payload.Room).Msg("Data channels created")
 }
 
 func (d *Daemon) onDataChannel(roomID string) func(*webrtc.DataChannel, string) {

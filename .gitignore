@@ -21,3 +21,9 @@ xcuserdata/
 DerivedData/
 *.app
 build/
+remottyd
+Package.resolved
+
+# iOS build artifacts
+ios/remotty/.build/
+Package.resolved

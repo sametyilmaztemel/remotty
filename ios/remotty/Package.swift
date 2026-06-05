@@ -15,13 +15,13 @@ let package = Package(
     ],
     dependencies: [
         // WebRTC framework for iOS
-        .package(url: "https://github.com/webrtc-sdk/webrtc-ios", branch: "main"),
+        .package(url: "https://github.com/stasel/WebRTC", branch: "latest"),
     ],
     targets: [
         .executableTarget(
             name: "remotty-ios",
             dependencies: [
-                .product(name: "WebRTC", package: "webrtc-ios"),
+                .product(name: "WebRTC", package: "WebRTC"),
             ],
             path: ".",
             exclude: [
