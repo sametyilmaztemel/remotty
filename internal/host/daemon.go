@@ -376,6 +376,7 @@ func (d *Daemon) handleConnectRequest(msg protocol.Message) {
 		ClientID:  payload.ClientID,
 		RoomID:    payload.Room,
 		WebRTC:    engine,
+		Authed:    d.cfg.MasterHash == "", // auto-auth when no password configured
 		CreatedAt: time.Now(),
 	}
 

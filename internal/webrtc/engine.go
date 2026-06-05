@@ -343,7 +343,9 @@ func (e *Engine) HandleICE(msg protocol.Message) error {
 	return e.pc.AddICECandidate(candidate)
 }
 
-// CreateDataChannel creates a new data channel.
+// CreateDataChannel creates a new data channel and wires up the OnOpen
+// callback so locally-created channels also trigger cfg.OnDataChannel
+// (the same callback used for remote-received channels via OnDataChannel).
 func (e *Engine) CreateDataChannel(label string) *DataChannel {
 	dc, err := e.pc.CreateDataChannel(label, &pion.DataChannelInit{
 		Ordered:        boolPtr(true),
@@ -358,7 +360,22 @@ func (e *Engine) CreateDataChannel(label string) *DataChannel {
 	e.dataChannels[label] = dc
 	e.mu.Unlock()
 
-	return &DataChannel{DataChannel: dc}
+	wrapped := &DataChannel{DataChannel: dc}
+
+	// Register OnOpen to trigger cfg.OnDataChannel, matching the behaviour
+	// of remote channels received via pc.OnDataChannel.
+	dc.OnOpen(func() {
+		log.Debug().Str("label", label).Msg("Locally-created data channel opened")
+		if e.config.OnDataChannel != nil {
+			e.config.OnDataChannel(wrapped, label)
+		}
+	})
+
+	dc.OnClose(func() {
+		log.Debug().Str("label", label).Msg("Data channel closed")
+	})
+
+	return wrapped
 }
 
 // AddVideoTrack adds a video track for screen sharing.
