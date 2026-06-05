@@ -31,6 +31,7 @@ import (
 type Daemon struct {
 	cfg        config.HostConfig
 	signalConn *websocket.Conn
+	signalMu   sync.Mutex // guards concurrent writes to signalConn
 	peerID     string
 	webrtcEng  *webrtc.Engine
 	ptyMgr     *pty.Manager
@@ -302,7 +303,7 @@ func (d *Daemon) handleConnectRequest(msg protocol.Message) {
 
 	// Create WebRTC engine for this session
 	engine, err := webrtc.NewEngine(func(cfg *webrtc.EngineConfig) {
-		cfg.SignalConn = d.signalConn
+		cfg.SignalConn = webrtc.NewSafeConn(d.signalConn)
 		cfg.RoomID = payload.Room
 		cfg.OnDataChannel = d.onDataChannel(payload.Room)
 		cfg.ICEServers = []string{"stun:stun.l.google.com:19302"}

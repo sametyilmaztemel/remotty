@@ -15,6 +15,33 @@ import (
 )
 
 
+// SafeConn wraps *websocket.Conn with a mutex for concurrent-safe writes.
+type SafeConn struct {
+	conn *websocket.Conn
+	mu   sync.Mutex
+}
+
+// NewSafeConn wraps a WebSocket connection for safe concurrent use.
+func NewSafeConn(conn *websocket.Conn) *SafeConn {
+	return &SafeConn{conn: conn}
+}
+
+// WriteJSON sends a JSON message, serialising concurrent calls.
+func (s *SafeConn) WriteJSON(v interface{}) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.conn.WriteJSON(v)
+}
+
+// ReadJSON delegates to the underlying connection (no lock needed for reads).
+func (s *SafeConn) ReadJSON(v interface{}) error {
+	return s.conn.ReadJSON(v)
+}
+
+// Underlying returns the raw *websocket.Conn (use with care).
+func (s *SafeConn) Underlying() *websocket.Conn { return s.conn }
+
+
 // Data channel labels used across the system.
 const (
 	DataChannelAuth      = "auth"
@@ -71,7 +98,7 @@ type Engine struct {
 
 // EngineConfig for WebRTC setup.
 type EngineConfig struct {
-	SignalConn     *websocket.Conn
+	SignalConn     *SafeConn
 	RoomID         string
 	ICEServers     []string
 	OnDataChannel  func(dc *DataChannel, label string)

@@ -84,7 +84,7 @@ func TestHandleOfferWithSignalConn(t *testing.T) {
 	// Engine A — will create offer
 	engA, err := NewEngine(func(cfg *EngineConfig) {
 		cfg.ICEServers = []string{"stun:stun.l.google.com:19302"}
-		cfg.SignalConn = connA
+		cfg.SignalConn = NewSafeConn(connA)
 		cfg.RoomID = "room-1"
 	})
 	if err != nil {
@@ -95,7 +95,7 @@ func TestHandleOfferWithSignalConn(t *testing.T) {
 	// Engine B — will receive offer
 	engB, err := NewEngine(func(cfg *EngineConfig) {
 		cfg.ICEServers = []string{"stun:stun.l.google.com:19302"}
-		cfg.SignalConn = connB
+		cfg.SignalConn = NewSafeConn(connB)
 		cfg.RoomID = "room-1"
 	})
 	if err != nil {
@@ -134,7 +134,7 @@ func TestHandleAnswerWithSignalConn(t *testing.T) {
 	// A creates offer
 	engA, err := NewEngine(func(cfg *EngineConfig) {
 		cfg.ICEServers = []string{"stun:stun.l.google.com:19302"}
-		cfg.SignalConn = connA
+		cfg.SignalConn = NewSafeConn(connA)
 		cfg.RoomID = "room-1"
 	})
 	if err != nil {
@@ -145,7 +145,7 @@ func TestHandleAnswerWithSignalConn(t *testing.T) {
 	// B creates answer
 	engB, err := NewEngine(func(cfg *EngineConfig) {
 		cfg.ICEServers = []string{"stun:stun.l.google.com:19302"}
-		cfg.SignalConn = connB
+		cfg.SignalConn = NewSafeConn(connB)
 		cfg.RoomID = "room-1"
 	})
 	if err != nil {
@@ -215,7 +215,7 @@ func TestNewEngineWithSignalConn(t *testing.T) {
 
 	eng, err := NewEngine(func(cfg *EngineConfig) {
 		cfg.ICEServers = []string{"stun:stun.l.google.com:19302"}
-		cfg.SignalConn = cliConn
+		cfg.SignalConn = NewSafeConn(cliConn)
 		cfg.RoomID = "test-room"
 	})
 	if err != nil {

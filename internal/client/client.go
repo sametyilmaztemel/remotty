@@ -111,7 +111,7 @@ func (c *Client) ConnectInteractive(ctx context.Context) error {
 
 	// Create WebRTC engine
 	engine, err := webrtc.NewEngine(func(cfg *webrtc.EngineConfig) {
-		cfg.SignalConn = conn
+		cfg.SignalConn = webrtc.NewSafeConn(conn)
 		cfg.RoomID = roomInfo.Room
 		cfg.ICEServers = []string{"stun:stun.l.google.com:19302"}
 	})
