@@ -14,8 +14,15 @@ export function useWebRTC({ signal, room, onDataChannel, onStateChange }: UseWeb
   const [connected, setConnected] = useState(false);
   const [state, setState] = useState('new');
   const rtcRef = useRef<WebRTCClient | null>(null);
+  const signalHandlers = useRef<Array<{ type: string; handler: (msg: Message) => void }>>([]);
 
   const init = useCallback(async (isOfferer: boolean) => {
+    // Clean up any previous listeners before registering new ones
+    for (const { type, handler } of signalHandlers.current) {
+      signal.off(type as any, handler);
+    }
+    signalHandlers.current = [];
+
     const rtc = new WebRTCClient();
     rtcRef.current = rtc;
 
@@ -59,6 +66,11 @@ export function useWebRTC({ signal, room, onDataChannel, onStateChange }: UseWeb
     signal.on('offer', handleSignal);
     signal.on('answer', handleSignal);
     signal.on('ice_candidate', handleSignal);
+    signalHandlers.current = [
+      { type: 'offer', handler: handleSignal },
+      { type: 'answer', handler: handleSignal },
+      { type: 'ice_candidate', handler: handleSignal },
+    ];
 
     if (isOfferer) {
       const offer = await rtc.createOffer();
@@ -69,10 +81,17 @@ export function useWebRTC({ signal, room, onDataChannel, onStateChange }: UseWeb
   }, [signal, room, onDataChannel, onStateChange]);
 
   const close = useCallback(() => {
+    // Remove signal listeners to prevent leaks
+    for (const { type, handler } of signalHandlers.current) {
+      signal.off(type as any, handler);
+    }
+    signalHandlers.current = [];
+
     rtcRef.current?.close();
+    rtcRef.current = null;
     setConnected(false);
     setState('closed');
-  }, []);
+  }, [signal]);
 
   const send = useCallback((label: string, data: ArrayBuffer | string) => {
     // Find the data channel by label

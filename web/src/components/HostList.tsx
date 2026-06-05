@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useSignaling } from '../hooks/useSignaling';
 import type { HostInfo, Message } from '../lib/protocol';
 import QRCode from './QRCode';
@@ -12,6 +12,7 @@ export default function HostList({ onSelect }: Props) {
   const [hosts, setHosts] = useState<HostInfo[]>([]);
   const [error, setError] = useState('');
   const [qrHost, setQrHost] = useState<HostInfo | null>(null);
+  const skipConnectRef = useRef(false);
 
   useEffect(() => {
     if (!client) return;
@@ -30,10 +31,15 @@ export default function HostList({ onSelect }: Props) {
     }).catch(err => setError(err.message));
   }, [client, connect]);
 
-  const handleConnect = (host: HostInfo) => {
-    client?.send({ type: 'connect', payload: { host_id: host.id } });
-    client?.on('room_ready', () => onSelect(host));
-  };
+  const handleConnect = useCallback((host: HostInfo) => {
+    // HostList only calls onSelect — the actual WebRTC connection
+    // is initiated by TerminalView or ScreenViewer when they mount.
+    // Do NOT send 'connect' here — that would create a room prematurely
+    // and leak a room_ready handler that redirects to terminal on every
+    // subsequent room_ready event (breaking screen share, file transfer, etc.)
+    skipConnectRef.current = true;
+    onSelect(host);
+  }, [onSelect]);
 
   return (
     <div className="host-list-screen">
