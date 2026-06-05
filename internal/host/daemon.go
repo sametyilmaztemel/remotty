@@ -607,8 +607,16 @@ func (d *Daemon) handleScreenChannel(session *Session, dc *webrtc.DataChannel) {
 			if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 				return
 			}
-			if err := screen.KeyRelease(payload.KeyCode); err != nil {
-				d.log.Warn().Err(err).Msg("KeyRelease failed")
+			var keyCode uint16
+			if payload.Chars != "" {
+				keyCode = screen.StringToKeyCode(payload.Chars)
+			} else {
+				keyCode = payload.KeyCode
+			}
+			if keyCode != 0 {
+				if err := screen.KeyRelease(keyCode); err != nil {
+					d.log.Warn().Err(err).Msg("KeyRelease failed")
+				}
 			}
 		}
 	})

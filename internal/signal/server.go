@@ -637,10 +637,10 @@ func withMiddleware(next http.Handler, dev bool, rl *RateLimiter, allowedOrigins
 			return
 		}
 
-		// CORS headers
+		// CORS headers — allow all when no specific origins configured (LAN tool default)
 		if len(allowedOrigins) > 0 {
 			w.Header().Set("Access-Control-Allow-Origin", allowedOrigins[0])
-		} else if dev {
+		} else {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
@@ -674,9 +674,10 @@ func withMiddleware(next http.Handler, dev bool, rl *RateLimiter, allowedOrigins
 }
 
 // isOriginAllowed checks if the request origin is in the allowed list.
+// When no origins are configured, all origins are allowed (LAN tool default).
 func isOriginAllowed(origin string, allowed []string, dev bool) bool {
-	if dev && len(allowed) == 0 {
-		return true // DevMode without explicit origins = allow all
+	if len(allowed) == 0 {
+		return true // No explicit origins = allow all (any mode)
 	}
 	for _, a := range allowed {
 		if a == "*" || a == origin {

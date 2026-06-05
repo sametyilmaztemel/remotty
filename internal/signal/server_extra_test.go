@@ -88,7 +88,7 @@ func TestIsOriginAllowed(t *testing.T) {
 		{"explicit match", "http://example.com", []string{"http://example.com"}, false, true},
 		{"wildcard", "http://anything.com", []string{"*"}, false, true},
 		{"no match", "http://evil.com", []string{"http://good.com"}, false, false},
-		{"empty allowed", "http://example.com", []string{}, false, false},
+		{"empty allowed", "http://example.com", []string{}, false, true},
 		{"multiple allowed match", "http://b.com", []string{"http://a.com", "http://b.com", "http://c.com"}, false, true},
 	}
 
