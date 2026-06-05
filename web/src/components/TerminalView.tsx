@@ -36,6 +36,8 @@ interface Props {
   signalUrl: string;
 }
 
+type TermStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+
 export default function TerminalView({ host }: Props) {
   const { client } = useSignaling();
 
@@ -47,7 +49,8 @@ export default function TerminalView({ host }: Props) {
   const roomRef = useRef(`term-${host.id}-${Date.now()}`);
   const mountedRef = useRef(true);
   const signalHandlersRef = useRef<Array<{ type: string; handler: (msg: Message) => void }>>([]);
-  const [status, setStatus] = useState('disconnected');
+  const [status, setStatus] = useState<TermStatus>('disconnected');
+  const [statusMsg, setStatusMsg] = useState('');
 
   // Cleanup signal handlers
   const cleanupSignalHandlers = useCallback(() => {
@@ -64,7 +67,6 @@ export default function TerminalView({ host }: Props) {
     room: roomRef.current,
     onDataChannel(label, dc) {
       if (label !== 'terminal') return;
-      // Set up terminal data channel
       dcRef.current = dc;
       dc.binaryType = 'arraybuffer';
       dc.onmessage = (event) => {
@@ -87,6 +89,7 @@ export default function TerminalView({ host }: Props) {
         setStatus('connected');
       } else if (state === 'failed') {
         setStatus('error');
+        setStatusMsg('WebRTC connection failed');
       } else if (state === 'disconnected' || state === 'closed') {
         setStatus('disconnected');
       }
@@ -144,12 +147,14 @@ export default function TerminalView({ host }: Props) {
     (async () => {
       try {
         setStatus('connecting');
+        setStatusMsg('Initializing WebRTC...');
 
         // Step 1: Init WebRTC as answerer FIRST (register signal listeners for offer/answer/ice)
         await webrtc.init(false);
         if (cancelled) return;
 
         // Step 2: Send connect to signaling to create a room with the host
+        setStatusMsg('Connecting to host...');
         client.send({ type: 'connect', payload: { host_id: host.id } });
 
         // Step 3: Wait for room_ready
@@ -158,8 +163,7 @@ export default function TerminalView({ host }: Props) {
         roomRef.current = roomId;
 
         // Step 4: Wait for data channel to open (handled in onDataChannel)
-        // The host will offer WebRTC, we answer, then data channels arrive
-        // Wait up to 20s for the terminal data channel
+        setStatusMsg('Establishing terminal channel...');
         await new Promise<void>((resolve, reject) => {
           const checkDc = setInterval(() => {
             if (dcRef.current?.readyState === 'open') {
@@ -176,10 +180,12 @@ export default function TerminalView({ host }: Props) {
 
         if (cancelled) return;
         setStatus('connected');
+        setStatusMsg('');
       } catch (err) {
         if (!cancelled) {
           console.error('[TerminalView] Connection failed:', err);
           setStatus('error');
+          setStatusMsg(err instanceof Error ? err.message : 'Connection failed');
         }
       }
     })();
@@ -199,14 +205,15 @@ export default function TerminalView({ host }: Props) {
     const term = new Terminal({
       cursorBlink: true,
       cursorStyle: 'block',
-      fontSize: 13,
-      fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+      fontSize: 14,
+      fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
       lineHeight: 1.35,
       letterSpacing: 0,
       theme: TERMINAL_THEME,
       allowTransparency: false,
-      scrollback: 5000,
+      scrollback: 10000,
       smoothScrollDuration: 0,
+      minimumContrastRatio: 4.5,
     });
 
     const fitAddon = new FitAddon();
@@ -250,24 +257,50 @@ export default function TerminalView({ host }: Props) {
     };
   }, []);
 
+  // ── Connection splash overlay ──────────────────
+  const showOverlay = status === 'connecting' || status === 'error';
+
   return (
     <div className="terminal-screen">
+      {/* ── Header ── */}
       <div className="terminal-header">
         <div className="terminal-title">
-          <span className={`status-indicator small ${status === 'connected' ? 'online' : status === 'error' ? 'error' : ''}`} />
-          {host.name}
-          <span className="terminal-subtitle">{status}</span>
+          <span className={`term-indicator ${status}`} />
+          <span className="term-hostname">{host.name}</span>
+          <span className="term-features">
+            {host.features?.includes('screen') ? '⎈' : ''}
+          </span>
         </div>
         <div className="terminal-controls">
-          <button className="btn-small" onClick={() => fitRef.current?.fit()}>
-            Fit
+          <button className="btn-icon-sm" onClick={() => fitRef.current?.fit()} title="Fit terminal">
+            ⊞
           </button>
-          <button className="btn-small" onClick={() => terminalRef.current?.clear()}>
-            Clear
+          <button className="btn-icon-sm" onClick={() => terminalRef.current?.clear()} title="Clear">
+            ✕
           </button>
         </div>
       </div>
+
+      {/* ── Terminal container ── */}
       <div className="terminal-container" ref={termRef} />
+
+      {/* ── Splash overlay ── */}
+      {showOverlay && (
+        <div className="term-overlay">
+          {status === 'connecting' && (
+            <div className="term-overlay-inner">
+              <div className="term-spinner" />
+              <div className="term-overlay-text">{statusMsg || 'Connecting...'}</div>
+            </div>
+          )}
+          {status === 'error' && (
+            <div className="term-overlay-inner">
+              <div className="term-overlay-icon error">⚠</div>
+              <div className="term-overlay-text error">{statusMsg || 'Connection error'}</div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
