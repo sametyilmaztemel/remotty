@@ -9,10 +9,10 @@ import { useWebRTC } from '../../hooks/useWebRTC';
 // Mock useSignaling hook
 const mockClient = {
   send: vi.fn(),
-  on: vi.fn(function () {
+  on: vi.fn(function (this: ReturnType<typeof vi.fn>) {
     return this;
   }),
-  off: vi.fn(function () {
+  off: vi.fn(function (this: ReturnType<typeof vi.fn>) {
     return this;
   }),
   connect: vi.fn(),

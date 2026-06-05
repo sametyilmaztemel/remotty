@@ -104,7 +104,8 @@ export type ScreenDCMessage =
   | { type: 'mouse_move'; payload: MouseMovePayload }
   | { type: 'mouse_click'; payload: MouseClickPayload }
   | { type: 'mouse_scroll'; payload: MouseScrollPayload }
-  | { type: 'key_press'; payload: KeyPressPayload };
+  | { type: 'key_press'; payload: KeyPressPayload }
+  | { type: 'key_release'; payload: KeyPressPayload };
 
 // ─── Clipboard ─────────────────────────────────────
 

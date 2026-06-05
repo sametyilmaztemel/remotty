@@ -525,7 +525,7 @@ export default function ScreenViewer({ host }: Props) {
     if (e.ctrlKey || e.metaKey) return;
     sendOverDC({
       type: 'key_press',
-      payload: { key_code: e.keyCode, chars: e.key },
+      payload: { key_code: e.keyCode, chars: e.key, down: true },
     });
     e.preventDefault();
   }, [sendOverDC]);
@@ -535,7 +535,7 @@ export default function ScreenViewer({ host }: Props) {
     if (e.ctrlKey || e.metaKey) return;
     sendOverDC({
       type: 'key_release',
-      payload: { key_code: e.keyCode, chars: e.key },
+      payload: { key_code: e.keyCode, chars: e.key, down: false },
     });
     e.preventDefault();
   }, [sendOverDC]);
