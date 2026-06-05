@@ -20,8 +20,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildMenu()
         updateIcon()
 
-        // Auto-start host daemon
-        host.startHost()
+        // Auto-start signal server then host daemon
+        host.startSignal()
 
         // Periodically refresh menu to update session list
         startMenuRefresh()
@@ -262,7 +262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func quitApp() {
-        host.stopHost()
+        host.stopAll()
         NSApp.terminate(nil)
     }
 

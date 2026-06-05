@@ -14,7 +14,6 @@ public struct SessionInfo: Codable, Identifiable {
     public let authed: Bool
 
     public var displayName: String {
-        // Use client_id as device name (truncated for display)
         let name = client_id.isEmpty ? id : client_id
         if name.hasPrefix("p-") { return "Device \(name.dropFirst(2).prefix(8))" }
         return name
@@ -36,13 +35,14 @@ public class HostManager: ObservableObject {
     @Published public var launchAtLogin: Bool { didSet { updateLaunchAtLogin() } }
     @Published public private(set) var screenSharing = false
     @Published public private(set) var sessions: [SessionInfo] = []
+    @Published public private(set) var signalRunning = false
 
     private var hostProcess: Process?
+    private var signalProcess: Process?
     private var healthTimer: Timer?
     private var sessionPollTimer: Timer?
     private var screenProcess: Process?
 
-    /// Singleton access for AppKit / target-action callbacks
     public static let shared = HostManager()
 
     public init() {
@@ -51,6 +51,74 @@ public class HostManager: ObservableObject {
         hostName = UserDefaults.standard.string(forKey: "hostName")
             ?? ProcessInfo.processInfo.hostName
         launchAtLogin = (try? SMAppService.mainApp.status == .enabled) ?? false
+    }
+
+    // MARK: - Signal Lifecycle
+
+    public func startSignal() {
+        guard !signalRunning else { return }
+        guard let binary = findBinary() else {
+            statusMessage = "Binary not found"
+            return
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: binary)
+        process.arguments = ["signal", "--port", "9000", "--config", configPath()]
+        process.currentDirectoryURL = URL(fileURLWithPath: projectDir())
+
+        let stdOut = Pipe()
+        process.standardOutput = stdOut
+        stdOut.fileHandleForReading.readabilityHandler = { h in
+            let d = h.availableData
+            if d.count > 0, let s = String(data: d, encoding: .utf8) {
+                os_log("%{public}s", log: Log, type: .debug,
+                       s.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+        }
+
+        let stdErr = Pipe()
+        process.standardError = stdErr
+        stdErr.fileHandleForReading.readabilityHandler = { h in
+            let d = h.availableData
+            if d.count > 0, let s = String(data: d, encoding: .utf8) {
+                os_log("stderr: %{public}s", log: Log, type: .error,
+                       s.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+        }
+
+        process.terminationHandler = { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.signalRunning = false
+                self?.signalProcess = nil
+            }
+        }
+
+        do {
+            try process.run()
+            signalProcess = process
+            signalRunning = true
+            statusMessage = "Signal started"
+            // Wait a moment then start host
+            DispatchQueue.global().asyncAfter(deadline: .now() + 2) { [weak self] in
+                DispatchQueue.main.async {
+                    self?.startHost()
+                }
+            }
+        } catch {
+            statusMessage = "Signal failed: \(error.localizedDescription)"
+        }
+    }
+
+    public func stopSignal() {
+        guard let p = signalProcess, signalRunning else { return }
+        p.terminate()
+        DispatchQueue.global().asyncAfter(deadline: .now() + 3) { [weak self] in
+            guard let self = self, let p = self.signalProcess, p.isRunning else { return }
+            kill(p.processIdentifier, SIGKILL)
+        }
+        signalProcess = nil
+        signalRunning = false
     }
 
     // MARK: - Host Lifecycle
@@ -75,12 +143,13 @@ public class HostManager: ObservableObject {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: binary)
-        process.arguments = ["host", "--signal", url, "--name", name]
+        process.arguments = ["host", "--signal", url, "--name", name, "--config", configPath()]
+        process.currentDirectoryURL = URL(fileURLWithPath: projectDir())
+
         if !masterPassword.isEmpty {
             process.arguments?.append("--master-password")
             process.arguments?.append(masterPassword)
         }
-        process.currentDirectoryURL = URL(fileURLWithPath: NSHomeDirectory())
 
         let stdOut = Pipe()
         process.standardOutput = stdOut
@@ -120,7 +189,7 @@ public class HostManager: ObservableObject {
             try process.run()
             hostProcess = process
             isRunning = true
-            statusMessage = "Running \u{2014} \(name)"
+            statusMessage = "Running — \(name)"
             startSessionPolling()
             healthTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
                 guard let self = self, let p = self.hostProcess, !p.isRunning else { return }
@@ -147,6 +216,33 @@ public class HostManager: ObservableObject {
         healthTimer?.invalidate()
         healthTimer = nil
         statusMessage = "Stopped"
+    }
+
+    public func stopAll() {
+        stopHost()
+        stopSignal()
+    }
+
+    // MARK: - Helpers
+
+    func projectDir() -> String {
+        // Find project root: look for remotty.yaml in current dir or parent dirs
+        let candidates = [
+            FileManager.default.currentDirectoryPath,
+            NSHomeDirectory() + "/projects/remotty",
+            NSHomeDirectory() + "/remotty",
+            "/Users/x13/projects/remotty",
+        ]
+        for dir in candidates {
+            if FileManager.default.fileExists(atPath: dir + "/remotty.yaml") {
+                return dir
+            }
+        }
+        return NSHomeDirectory() + "/projects/remotty"
+    }
+
+    func configPath() -> String {
+        return projectDir() + "/remotty.yaml"
     }
 
     // MARK: - Screen Sharing
