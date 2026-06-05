@@ -16,7 +16,7 @@ signal:
 
 host:
   signal_url: ws://localhost:9000
-  name: my-server
+  name: Samets-MacBook-Pro
   # master_password: set-via-env-REMOTTY_MASTER_PASSWORD
   features:
     - terminal

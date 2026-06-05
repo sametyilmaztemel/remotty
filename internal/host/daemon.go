@@ -256,10 +256,46 @@ func (d *Daemon) handleMessage(msg protocol.Message) {
 	switch msg.Type {
 	case protocol.MsgConnect:
 		d.handleConnectRequest(msg)
+	case protocol.MsgAnswer:
+		d.handleWebRTCMessage(msg, "answer", func(e *webrtc.Engine) error {
+			d.log.Debug().Str("room", msg.Room).Msg("Forwarding answer to WebRTC engine")
+			return e.HandleAnswer(msg)
+		})
+	case protocol.MsgICECandidate:
+		d.handleWebRTCMessage(msg, "ice_candidate", func(e *webrtc.Engine) error {
+			return e.HandleICE(msg)
+		})
+	case protocol.MsgOffer:
+		// Browser might send renegotiation offers
+		d.handleWebRTCMessage(msg, "offer", func(e *webrtc.Engine) error {
+			return e.HandleOffer(msg)
+		})
 	case protocol.MsgPeerLeft:
 		d.handlePeerDisconnect(msg)
 	case protocol.MsgError:
 		d.handleError(msg)
+	}
+}
+
+// handleWebRTCMessage finds the session for the message's room and forwards
+// the WebRTC signaling message to the session's engine.
+func (d *Daemon) handleWebRTCMessage(msg protocol.Message, msgType string, handler func(*webrtc.Engine) error) {
+	roomID := msg.Room
+	if roomID == "" {
+		d.log.Warn().Str("type", msgType).Msg("WebRTC message without room ID, dropping")
+		return
+	}
+	session := d.getSession(roomID)
+	if session == nil {
+		d.log.Warn().Str("type", msgType).Str("room", roomID).Msg("No session for WebRTC message, dropping")
+		return
+	}
+	if session.WebRTC == nil {
+		d.log.Warn().Str("room", roomID).Msg("Session has no WebRTC engine")
+		return
+	}
+	if err := handler(session.WebRTC); err != nil {
+		d.log.Error().Err(err).Str("type", msgType).Str("room", roomID).Msg("WebRTC handler failed")
 	}
 }
 
@@ -347,6 +383,16 @@ func (d *Daemon) handleConnectRequest(msg protocol.Message) {
 	d.sessions[payload.Room] = session
 	d.mu.Unlock()
 
+	// Create data channels BEFORE the offer so they're included in the SDP.
+	// The browser/client receives them via OnDataChannel.
+	engine.CreateDataChannel(webrtc.DataChannelAuth)
+	engine.CreateDataChannel(webrtc.DataChannelTerminal)
+	engine.CreateDataChannel(webrtc.DataChannelScreen)
+	engine.CreateDataChannel(webrtc.DataChannelTransfer)
+	engine.CreateDataChannel(webrtc.DataChannelClipboard)
+	engine.CreateDataChannel(webrtc.DataChannelFile)
+	d.log.Debug().Str("room", payload.Room).Msg("Data channels created on engine")
+
 	// Create and send WebRTC offer
 	offer, err := engine.CreateOffer()
 	if err != nil {
@@ -357,16 +403,7 @@ func (d *Daemon) handleConnectRequest(msg protocol.Message) {
 	offerMsg := protocol.NewMessage(protocol.MsgOffer, offer)
 	offerMsg.Room = payload.Room
 	d.signalConn.WriteJSON(offerMsg)
-
-	// Create data channels so the client can receive them via OnDataChannel
-	// These are negotiated in-band after the WebRTC connection establishes.
-	engine.CreateDataChannel(webrtc.DataChannelAuth)
-	engine.CreateDataChannel(webrtc.DataChannelTerminal)
-	engine.CreateDataChannel(webrtc.DataChannelScreen)
-	engine.CreateDataChannel(webrtc.DataChannelTransfer)
-	engine.CreateDataChannel(webrtc.DataChannelClipboard)
-	engine.CreateDataChannel(webrtc.DataChannelFile)
-	d.log.Debug().Str("room", payload.Room).Msg("Data channels created")
+	d.log.Debug().Str("room", payload.Room).Msg("WebRTC offer sent")
 }
 
 func (d *Daemon) onDataChannel(roomID string) func(*webrtc.DataChannel, string) {

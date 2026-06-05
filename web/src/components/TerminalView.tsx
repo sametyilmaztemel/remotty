@@ -145,23 +145,20 @@ export default function TerminalView({ host }: Props) {
       try {
         setStatus('connecting');
 
-        // Step 1: Send connect to signaling to create a room with the host
+        // Step 1: Init WebRTC as answerer FIRST (register signal listeners for offer/answer/ice)
+        await webrtc.init(false);
+        if (cancelled) return;
+
+        // Step 2: Send connect to signaling to create a room with the host
         client.send({ type: 'connect', payload: { host_id: host.id } });
 
-        // Step 2: Wait for room_ready
+        // Step 3: Wait for room_ready
         const roomId = await waitForRoomReady();
         if (cancelled) return;
         roomRef.current = roomId;
 
-        // Step 3: Init WebRTC as answerer (host creates offer)
-        await webrtc.init(false);
-        if (cancelled) return;
-
-        // Step 4: Wait for WebRTC connected state
-        setStatus('starting');
-
-        // Step 5: Wait for data channel to open (handled in onDataChannel)
-        // The host will offer WebRTC, we answer, then host creates data channels
+        // Step 4: Wait for data channel to open (handled in onDataChannel)
+        // The host will offer WebRTC, we answer, then data channels arrive
         // Wait up to 20s for the terminal data channel
         await new Promise<void>((resolve, reject) => {
           const checkDc = setInterval(() => {
